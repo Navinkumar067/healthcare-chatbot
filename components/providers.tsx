@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { ToastContainer } from '@/components/toast'
+import { Toaster } from 'react-hot-toast'
+import { AuthProvider } from '@/context/AuthContext'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -19,14 +21,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  if (!mounted) {
-    return <>{children}</>
-  }
-
   return (
-    <>
+    <AuthProvider>
       {children}
-      <ToastContainer />
-    </>
+      {/* We only render the toasts after the component has mounted to prevent hydration errors */}
+      {mounted && (
+        <>
+          <ToastContainer />
+          <Toaster position="top-right" />
+        </>
+      )}
+    </AuthProvider>
   )
 }

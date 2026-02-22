@@ -3,151 +3,160 @@
 import { useState, useRef, useEffect } from 'react'
 import { Navbar } from '@/components/navbar'
 import { Footer } from '@/components/footer'
-import { LoadingSpinner } from '@/components/loading-spinner'
-import { useToast } from '@/components/toast'
-import { Send, AlertCircle } from 'lucide-react'
-
-interface Message {
-  id: string
-  type: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-}
+import { Send, Bot, User, AlertTriangle, Loader2, Sparkles } from 'lucide-react'
+import { ProtectedRoute } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
+import toast from 'react-hot-toast'
 
 export default function ChatbotPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      type: 'assistant',
-      content: 'Hello! I\'m HealthChat, your AI health assistant. I can help you with health information and guidance. How can I assist you today?',
-      timestamp: new Date(),
-    },
+  const [messages, setMessages] = useState([
+    { role: 'bot', content: 'hello! i am your healthchat ai. i have reviewed your medical profile. how can i assist you with your symptoms or medications today?' }
   ])
   const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { addToast } = useToast()
+  const [isTyping, setIsTyping] = useState(false)
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
+  // 1. Fetch User Profile from Supabase to provide context to the AI
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!input.trim()) return
-
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: input,
-      timestamp: new Date(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
-    setInput('')
-    setIsLoading(true)
-
-    // Simulate AI response
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content:
-          'Thank you for your question. Based on general health information, I can provide you with some guidance. However, please remember that I\'m not a licensed medical professional. If your symptoms are severe or persistent, please consult with a healthcare provider or call 108 in case of emergencies.',
-        timestamp: new Date(),
+    const fetchProfile = async () => {
+      const email = sessionStorage.getItem('userEmail')
+      if (email) {
+        const { data } = await supabase.from('profiles').select('*').eq('email', email).single()
+        if (data) setUserProfile(data)
       }
+    }
+    fetchProfile()
+  }, [])
 
-      setMessages((prev) => [...prev, assistantMessage])
-      setIsLoading(false)
-      addToast('info', 'Response received', 'Your message has been processed')
-    }, 1000)
+  // Auto-scroll to latest message
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isTyping])
+
+  const handleSend = async () => {
+    if (!input.trim()) return
+    
+    const userMsg = { role: 'user', content: input }
+    setMessages(prev => [...prev, userMsg])
+    setInput('')
+    setIsTyping(true)
+
+    try {
+      // 2. Call our internal API route that connects to Gemini
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: userMsg.content,
+          profile: userProfile 
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error) throw new Error(data.error)
+
+      setMessages(prev => [...prev, { role: 'bot', content: data.text }])
+    } catch (err) {
+      toast.error("ai connection lost. please check your gemini api key.")
+      setMessages(prev => [...prev, { 
+        role: 'bot', 
+        content: "i'm sorry, i'm having trouble connecting to my medical database. please try again in a moment." 
+      }])
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950">
-      <Navbar />
-
-      <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto">
-        {/* Chat Container */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-lg ${
-                  message.type === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-blue-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-blue-100 dark:border-blue-900 rounded-bl-none'
-                }`}
-              >
-                <p className="text-sm">{message.content}</p>
-                <p
-                  className={`text-xs mt-2 ${
-                    message.type === 'user'
-                      ? 'text-blue-100'
-                      : 'text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  {message.timestamp.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+    <ProtectedRoute>
+      <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+        <Navbar />
+        
+        <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full p-4 md:p-6">
+          
+          {/* AI Status Header */}
+          <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 dark:shadow-none">
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-tight">healthchat intelligence</h2>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> 
+                  connected to medical cloud
                 </p>
               </div>
             </div>
-          ))}
-
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-blue-50 dark:bg-slate-900 border border-blue-100 dark:border-blue-900 rounded-lg rounded-bl-none px-4 py-3">
-                <LoadingSpinner size="sm" text="" />
-              </div>
+            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg">
+              <AlertTriangle className="text-amber-600" size={14} />
+              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase">emergency? call 108</span>
             </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input Area */}
-        <div className="border-t border-blue-100 dark:border-blue-900 p-4 md:p-6 bg-blue-50 dark:bg-slate-900">
-          {/* Disclaimer */}
-          <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex gap-2">
-            <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-yellow-700 dark:text-yellow-300">
-              This chatbot is for informational purposes only. For medical emergencies, call 108.
-            </p>
           </div>
 
-          <form onSubmit={handleSendMessage} className="flex gap-3">
-            <input
-              type="text"
+          {/* Chat Interface */}
+          <div className="flex-1 overflow-y-auto space-y-6 mb-4 pr-2 custom-scrollbar">
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`flex gap-3 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${
+                    m.role === 'user' 
+                    ? 'bg-blue-600 border-blue-500 text-white' 
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                  }`}>
+                    {m.role === 'user' ? <User size={14}/> : <Bot size={14}/>}
+                  </div>
+                  <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                    m.role === 'user' 
+                    ? 'bg-blue-600 text-white rounded-tr-none' 
+                    : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-tl-none'
+                  }`}>
+                    {m.content}
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {isTyping && (
+              <div className="flex justify-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                  <Loader2 size={14} className="animate-spin text-blue-600" />
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl rounded-tl-none">
+                   <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                   </div>
+                </div>
+              </div>
+            )}
+            <div ref={scrollRef} />
+          </div>
+
+          {/* Minimalist Input Area */}
+          <div className="relative mt-auto pt-4">
+            <input 
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask your health question..."
-              disabled={isLoading}
-              className="flex-1 px-4 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="describe your symptoms or ask a medical question..."
+              className="w-full p-4 pr-16 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-600 outline-none transition placeholder:text-slate-400"
             />
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            <button 
+              onClick={handleSend}
+              disabled={isTyping}
+              className="absolute right-3 bottom-3 p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:hover:bg-blue-600 shadow-md"
             >
-              <Send className="w-4 h-4" />
-              <span className="hidden sm:inline">Send</span>
+              <Send size={20} />
             </button>
-          </form>
-        </div>
-      </main>
-
-      <Footer />
-    </div>
+          </div>
+        </main>
+        
+        <Footer />
+      </div>
+    </ProtectedRoute>
   )
 }
