@@ -2,34 +2,125 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Navbar } from '@/components/navbar'
 import { Footer } from '@/components/footer'
 import { useToast } from '@/components/toast'
 import { LoadingSpinner } from '@/components/loading-spinner'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle } from 'lucide-react'
+
+interface FormErrors {
+  email?: string
+  password?: string
+}
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [errors, setErrors] = useState<FormErrors>({})
   const { addToast } = useToast()
+
+  // Demo credentials for testing
+  const demoUsers = {
+    admin: { email: 'admin@healthchat.com', password: 'admin123' },
+    user: { email: 'user@example.com', password: 'user123' },
+  }
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {}
+
+    if (!email.trim()) {
+      newErrors.email = 'Email is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = 'Please enter a valid email address'
+    }
+
+    if (!password) {
+      newErrors.password = 'Password is required'
+    } else if (password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const determineUserRole = (loginEmail: string): 'admin' | 'user' => {
+    if (loginEmail === demoUsers.admin.email) {
+      return 'admin'
+    }
+    return 'user'
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!email || !password) {
-      addToast('error', 'Validation Error', 'Please fill in all fields')
+    if (!validateForm()) {
+      addToast('error', 'Validation Error', 'Please check the form fields')
       return
     }
 
     setIsLoading(true)
 
-    // Simulate login
-    setTimeout(() => {
+    try {
+      // Simulate login API call
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      // Mock authentication logic
+      const isValidCredentials =
+        (email === demoUsers.admin.email && password === demoUsers.admin.password) ||
+        (email === demoUsers.user.email && password === demoUsers.user.password)
+
+      if (!isValidCredentials) {
+        addToast('error', 'Login Failed', 'Invalid email or password')
+        setPassword('')
+        setIsLoading(false)
+        return
+      }
+
+      // Determine user role and redirect
+      const userRole = determineUserRole(email)
+
+      // Store user info in sessionStorage
+      sessionStorage.setItem('userRole', userRole)
+      sessionStorage.setItem('userEmail', email)
+
+      addToast('success', 'Welcome Back!', `Logged in as ${userRole}`)
+
+      // Redirect based on role
+      setTimeout(() => {
+        if (userRole === 'admin') {
+          router.push('/admin-panel')
+        } else {
+          router.push('/dashboard')
+        }
+      }, 500)
+    } catch (error) {
+      addToast('error', 'Login Error', 'An error occurred. Please try again.')
       setIsLoading(false)
-      addToast('success', 'Welcome Back!', `Logged in as ${email}`)
-    }, 1500)
+    }
+  }
+
+  const handleInputChange = (
+    field: 'email' | 'password',
+    value: string
+  ) => {
+    if (field === 'email') {
+      setEmail(value)
+    } else {
+      setPassword(value)
+    }
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors((prev) => {
+        const updated = { ...prev }
+        delete updated[field]
+        return updated
+      })
+    }
   }
 
   return (
@@ -62,11 +153,21 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleInputChange('email', e.target.value)}
                 placeholder="you@example.com"
                 disabled={isLoading}
-                className="w-full px-4 py-2.5 border border-blue-200 dark:border-blue-800 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
+                className={`w-full px-4 py-2.5 border rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50 transition-colors ${
+                  errors.email
+                    ? 'border-red-500 dark:border-red-400'
+                    : 'border-blue-200 dark:border-blue-800'
+                }`}
               />
+              {errors.email && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle size={16} />
+                  {errors.email}
+                </div>
+              )}
             </div>
 
             {/* Password */}
@@ -79,20 +180,30 @@ export default function LoginPage() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
                   placeholder="••••••••"
                   disabled={isLoading}
-                  className="w-full px-4 py-2.5 pr-10 border border-blue-200 dark:border-blue-800 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
+                  className={`w-full px-4 py-2.5 pr-10 border rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50 transition-colors ${
+                    errors.password
+                      ? 'border-red-500 dark:border-red-400'
+                      : 'border-blue-200 dark:border-blue-800'
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                   aria-label="Toggle password visibility"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {errors.password && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle size={16} />
+                  {errors.password}
+                </div>
+              )}
             </div>
 
             {/* Remember & Forgot */}
@@ -146,6 +257,23 @@ export default function LoginPage() {
           >
             Create Account
           </Link>
+
+          {/* Demo Credentials */}
+          <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-200">
+            <p className="font-semibold mb-3">Demo Credentials for Testing:</p>
+            <div className="space-y-2">
+              <div>
+                <p className="font-medium">User Account:</p>
+                <p className="text-xs opacity-80">Email: <span className="font-mono">user@example.com</span></p>
+                <p className="text-xs opacity-80">Password: <span className="font-mono">user123</span></p>
+              </div>
+              <div className="border-t border-blue-200 dark:border-blue-700 pt-2">
+                <p className="font-medium">Admin Account:</p>
+                <p className="text-xs opacity-80">Email: <span className="font-mono">admin@healthchat.com</span></p>
+                <p className="text-xs opacity-80">Password: <span className="font-mono">admin123</span></p>
+              </div>
+            </div>
+          </div>
 
           {/* Footer Text */}
           <p className="text-center text-xs text-slate-600 dark:text-slate-400 mt-6">
