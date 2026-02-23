@@ -30,7 +30,7 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema)
   })
 
-const onSubmit = async (data: LoginFormValues) => {
+  const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true)
     try {
       // 1. Check if the user is the Admin
@@ -48,10 +48,10 @@ const onSubmit = async (data: LoginFormValues) => {
         }
       }
 
-      // 2. Check Supabase to see if the User Email exists
+      // 2. Check Supabase to see if the User Email exists AND check their ban status
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('email')
+        .select('email, is_banned') // <-- Added is_banned to the query
         .eq('email', data.email)
         .single()
 
@@ -62,9 +62,14 @@ const onSubmit = async (data: LoginFormValues) => {
         return
       }
 
-      // 3. If email exists, proceed with login
-      // (Note: In a real app, you'd check the password here too. 
-      // For your review, we are validating the email exists in your DB.)
+      // 3. Block login if the user is suspended
+      if (profile.is_banned) {
+        toast.error('This account has been suspended by an Admin.')
+        setIsLoading(false)
+        return
+      }
+
+      // 4. If email exists and user is active, proceed with login
       login('user-token', 'user')
       sessionStorage.setItem('userEmail', data.email)
       toast.success(`Welcome back!`)

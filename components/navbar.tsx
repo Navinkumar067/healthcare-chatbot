@@ -30,15 +30,16 @@ export function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 w-full bg-white dark:bg-slate-900 border-b border-blue-100 dark:border-blue-900 shadow-sm">
+    <nav className="sticky top-0 z-50 w-full bg-white dark:bg-slate-900 border-b border-blue-100 dark:border-slate-800 shadow-sm transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo */}
+          
+          {/* Custom "H" Logo & Title */}
           <Link href="/" className="flex items-center space-x-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center group-hover:from-blue-600 group-hover:to-blue-700 transition-all duration-200">
-              <span className="text-white font-bold text-lg">H</span>
+            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shadow-md shadow-blue-200 dark:shadow-none group-hover:bg-blue-700 transition-all duration-200">
+              <span className="text-white font-bold text-lg leading-none">H</span>
             </div>
-            <span className="font-bold text-lg text-blue-600 dark:text-blue-400 hidden sm:inline">HealthChat</span>
+            <span className="font-bold text-lg text-blue-600 dark:text-blue-400 hidden sm:inline tracking-tight">HealthChat</span>
           </Link>
 
           {/* Desktop Menu */}
@@ -58,10 +59,10 @@ export function Navbar() {
                 <Link href="/chatbot" className="px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                   Chatbot
                 </Link>
-                <Link href="/profile" className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                <Link href="/profile" className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                   <UserCircle size={18} /> Profile
                 </Link>
-                <button onClick={logout} className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors ml-2">
+                <button onClick={logout} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors ml-2">
                   <LogOut size={16} /> Logout
                 </button>
               </>
@@ -71,7 +72,7 @@ export function Navbar() {
                 <Link href="/login" className="px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                   Login
                 </Link>
-                <Link href="/signup" className="px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors">
+                <Link href="/signup" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors">
                   Sign Up
                 </Link>
               </>
@@ -83,7 +84,7 @@ export function Navbar() {
             {mounted && (
               <button
                 onClick={toggleDarkMode}
-                className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
                 aria-label="Toggle dark mode"
               >
                 {isDark ? <Sun size={20} /> : <Moon size={20} />}
@@ -92,7 +93,7 @@ export function Navbar() {
             
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              className="md:hidden p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
               aria-label="Toggle menu"
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
@@ -102,24 +103,24 @@ export function Navbar() {
 
         {/* Mobile Menu */}
         {isOpen && (
-          <div className="md:hidden pb-4">
-            <div className="space-y-2">
-              <Link href="/" className="block px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30" onClick={() => setIsOpen(false)}>Home</Link>
+          <div className="md:hidden pb-4 border-t border-slate-100 dark:border-slate-800 pt-2">
+            <div className="space-y-1">
+              <Link href="/" className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-md" onClick={() => setIsOpen(false)}>Home</Link>
               
               {token ? (
                 <>
                   {role === 'admin' && (
-                    <Link href="/admin-panel" className="block px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30" onClick={() => setIsOpen(false)}>Admin Panel</Link>
+                    <Link href="/admin-panel" className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-md" onClick={() => setIsOpen(false)}>Admin Panel</Link>
                   )}
-                  <Link href="/chatbot" className="block px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30" onClick={() => setIsOpen(false)}>Chatbot</Link>
-                  <Link href="/profile" className="block px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30" onClick={() => setIsOpen(false)}>Profile</Link>
-                  <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left block px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">Logout</button>
+                  <Link href="/chatbot" className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-md" onClick={() => setIsOpen(false)}>Chatbot</Link>
+                  <Link href="/profile" className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-md" onClick={() => setIsOpen(false)}>Profile</Link>
+                  <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left block px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md mt-2">Logout</button>
                 </>
               ) : (
-                <>
-                  <Link href="/login" className="block px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30" onClick={() => setIsOpen(false)}>Login</Link>
-                  <Link href="/signup" className="block px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 text-center" onClick={() => setIsOpen(false)}>Sign Up</Link>
-                </>
+                <div className="pt-2 flex flex-col gap-2">
+                  <Link href="/login" className="block w-full text-center px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onClick={() => setIsOpen(false)}>Login</Link>
+                  <Link href="/signup" className="block w-full text-center px-3 py-2 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg" onClick={() => setIsOpen(false)}>Sign Up</Link>
+                </div>
               )}
             </div>
           </div>
