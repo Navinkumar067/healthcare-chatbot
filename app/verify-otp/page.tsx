@@ -1,4 +1,6 @@
 'use client'
+
+import { supabase } from '@/lib/supabase'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Navbar } from '@/components/navbar'
@@ -17,11 +19,29 @@ export default function VerifyOtpPage() {
     const entered = otp.join('')
     const expected = sessionStorage.getItem('expectedOTP')
     setLoading(true)
-    setTimeout(() => {
+    
+    // Made the callback async to handle the database save
+    setTimeout(async () => {
       if (entered === expected) {
         toast.success("Identity Verified")
-        login('user-token', 'user')
         const data = JSON.parse(localStorage.getItem('userData') || '{}')
+        
+        // Auto-save the user to the database
+        if (data.email) {
+          try {
+            await supabase.from('profiles').upsert({
+              email: data.email,
+              full_name: data.fullName,
+              age: data.age,
+              phone_number: data.phoneNumber,
+              gender: data.gender,
+            })
+          } catch (err) {
+            console.error("Failed to auto-save profile:", err)
+          }
+        }
+
+        login('user-token', 'user')
         sessionStorage.setItem('userEmail', data.email)
         router.push('/profile')
       } else {

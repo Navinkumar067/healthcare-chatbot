@@ -74,7 +74,7 @@ export default function ProfilePage() {
     }
   }
 
-  // 2. HANDLE FILE UPLOAD (Instant Storage Upload)
+  // 2. HANDLE FILE UPLOAD (Instant Storage & Database Upload)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -94,19 +94,46 @@ export default function ProfilePage() {
         .from('reports')
         .getPublicUrl(fileName)
 
-      // Add to local state immediately so it shows in the list
-      setUploadedFiles(prev => [...prev, { name: file.name, url: publicUrl }])
-      toast.success('file uploaded to cloud!', { id: toastId })
+      // Update local state
+      const newFilesList = [...uploadedFiles, { name: file.name, url: publicUrl }]
+      setUploadedFiles(newFilesList)
+
+      // INSTANT DATABASE SYNC: Auto-save this file array directly to Supabase
+      const stringifiedFiles = newFilesList.map(f => JSON.stringify(f))
+      await supabase
+        .from('profiles')
+        .update({ file_urls: stringifiedFiles })
+        .eq('email', userEmail)
+
+      toast.success('file uploaded and saved to cloud!', { id: toastId })
     } catch (err) {
       toast.error('upload failed', { id: toastId })
     }
   }
 
-  // 3. SAVE FULL PROFILE (Database Sync)
+  // 3. REMOVE FILE (Instant Database Sync)
+  const removeFile = async (index: number) => {
+    try {
+      const newFilesList = uploadedFiles.filter((_, i) => i !== index)
+      setUploadedFiles(newFilesList)
+
+      // INSTANT DATABASE SYNC: Update database immediately on deletion
+      const stringifiedFiles = newFilesList.map(f => JSON.stringify(f))
+      await supabase
+        .from('profiles')
+        .update({ file_urls: stringifiedFiles })
+        .eq('email', userEmail)
+        
+    } catch (err) {
+      toast.error('failed to remove file from database')
+    }
+  }
+
+  // 4. SAVE FULL PROFILE TEXT DETAILS
   const onSubmit = async (values: any) => {
     setIsSaving(true)
     try {
-      // Stringify file objects for Postgres array
+      // Stringify file objects for Postgres array (just in case)
       const stringifiedFiles = uploadedFiles.map(f => JSON.stringify(f))
 
       const { error } = await supabase.from('profiles').upsert({
@@ -122,16 +149,12 @@ export default function ProfilePage() {
       })
 
       if (error) throw error
-      toast.success('profile & reports synced successfully!')
+      toast.success('profile updated successfully!')
     } catch (err) {
       toast.error('failed to save profile')
     } finally {
       setIsSaving(false)
     }
-  }
-
-  const removeFile = (index: number) => {
-    setUploadedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   if (isFetching) return <LoadingSpinner variant="overlay" text="loading your health profile..." />

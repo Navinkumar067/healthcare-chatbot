@@ -1,47 +1,92 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
-
-// Ensure you have GEMINI_API_KEY in your .env.local
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
     try {
-        const { message, profile } = await req.json();
+        const { message, imageUrl, history, profile } = await req.json();
 
-        if (!process.env.GEMINI_API_KEY) {
-            return NextResponse.json({ error: "Gemini API Key is missing" }, { status: 500 });
+        if (!process.env.GROQ_API_KEY) {
+            return NextResponse.json(
+                { error: "GROQ_API_KEY is missing from .env.local file." },
+                { status: 500 }
+            );
         }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-        // SYSTEM PROMPT: This is the "Brain" of the chatbot
+        let recordsText = "No external medical files uploaded.";
+        if (profile?.file_urls && Array.isArray(profile.file_urls) && profile.file_urls.length > 0) {
+            const files = profile.file_urls.map((f: string) => {
+                try { return JSON.parse(f).name; } catch { return "Unnamed Document"; }
+            }).join(", ");
+            recordsText = `Uploaded Medical Reports: ${files}`;
+        }
+
         const systemPrompt = `
-      You are HealthChat AI, a professional medical assistant.
-      
-      PATIENT CONTEXT:
-      - Name: ${profile?.full_name || 'Unknown'}
-      - Age: ${profile?.age || 'Unknown'}
-      - Existing Diseases: ${profile?.existing_diseases || 'None reported'}
-      - Allergies: ${profile?.allergies || 'None reported'}
-      - Current Medications: ${profile?.current_medicines || 'None reported'}
+          You are HealthChat AI, a professional medical assistant.
+          
+          PATIENT CONTEXT:
+          - Name: ${profile?.full_name || 'Unknown'}
+          - Age: ${profile?.age || 'Unknown'}
+          - Gender: ${profile?.gender || 'Unknown'}
+          - Existing Diseases: ${profile?.existing_diseases || 'None reported'}
+          - Allergies: ${profile?.allergies || 'None reported'}
+          - Current Medications: ${profile?.current_medicines || 'None reported'}
+          - ${recordsText}
 
-      INSTRUCTIONS:
-      1. Always address the user politely.
-      2. Use their medical history (Diseases/Allergies) to make your advice specific.
-      3. If the user mentions "chest pain", "difficulty breathing", "severe bleeding", or "stroke symptoms", 
-         stop immediately and tell them to call 108 or go to the nearest ER.
-      4. Keep responses clear, minimalist, and helpful.
-      5. MANDATORY DISCLAIMER: End every response with: "NOTE: I am an AI, not a doctor. Please consult a professional for medical decisions."
-    `;
+          INSTRUCTIONS:
+          1. If the user uploads an image, describe what you see visually, but gently remind them a physical exam is best for a real diagnosis.
+          2. Analyze their diseases and allergies deeply before advising.
+          3. If user mentions "chest pain", "difficulty breathing", "severe bleeding", or "stroke", tell them to call 108 immediately.
+          4. TONE: Be warm, conversational, and direct. Do NOT use repetitive robotic phrases like "I recommend consulting a doctor for proper evaluation" in every single message. Instead, seamlessly weave in casual reminders that you are an AI assistant when appropriate, but focus primarily on answering their question.
+        `;
 
-        const result = await model.generateContent([systemPrompt, message]);
-        const response = await result.response;
-        const text = response.text();
+        // Format history for Groq Vision Model
+        const formattedHistory = (history || []).map((msg: any) => {
+            if (msg.imageUrl) {
+                return {
+                    role: msg.role === 'bot' ? 'assistant' : 'user',
+                    content: [
+                        { type: "text", text: msg.content || "Here is an image." },
+                        { type: "image_url", image_url: { url: msg.imageUrl } }
+                    ]
+                };
+            }
+            return {
+                role: msg.role === 'bot' ? 'assistant' : 'user',
+                content: msg.content
+            };
+        });
+
+        // Add the current message
+        let currentMessageContent: any = message;
+        if (imageUrl) {
+            currentMessageContent = [
+                { type: "text", text: message || "Please analyze this image." },
+                { type: "image_url", image_url: { url: imageUrl } }
+            ];
+        }
+
+        // Call the new active Llama 4 Vision Model
+        const chatCompletion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: systemPrompt },
+                ...formattedHistory,
+                { role: "user", content: currentMessageContent }
+            ],
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            temperature: 0.5,
+        });
+
+        const text = chatCompletion.choices[0]?.message?.content || "I couldn't generate a response.";
 
         return NextResponse.json({ text });
 
     } catch (error: any) {
-        console.error("Gemini Error:", error);
-        return NextResponse.json({ error: "Failed to connect to AI" }, { status: 500 });
+        console.error("API Error Details:", error);
+        return NextResponse.json(
+            { error: error.message || "Failed to connect to the AI model." },
+            { status: 500 }
+        );
     }
 }

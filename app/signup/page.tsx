@@ -1,5 +1,6 @@
 'use client'
 
+import { supabase } from '@/lib/supabase'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -38,6 +39,17 @@ export default function SignupPage() {
   const onSubmit = async (data: SignupFormValues) => {
     setIsLoading(true)
     try {
+
+      const { data: existingUsers } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('email', data.email)
+
+      if (existingUsers && existingUsers.length > 0) {
+        toast.error('This email is already registered. Please log in.')
+        setIsLoading(false)
+        return
+      }
       localStorage.setItem('userData', JSON.stringify(data))
       const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString()
       sessionStorage.setItem('expectedOTP', generatedOTP)

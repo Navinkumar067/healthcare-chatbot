@@ -10,7 +10,6 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: 'HealthChat - AI Healthcare Assistant',
   description: 'Get instant health advice from our AI-powered chatbot. Professional medical information at your fingertips.',
-  generator: 'v0.app',
   icons: {
     icon: [
       {
