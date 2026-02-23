@@ -1,37 +1,40 @@
-# HealthChat AI: Intelligent Healthcare Platform
+# HealthChat AI: AI-Driven Public Health Chatbot
 
-A full-stack, AI-powered healthcare application built to provide context-aware medical assistance, secure patient data management, and cloud-based medical record storage.
+An advanced, multilingual healthcare solution designed for rural and semi-urban communities. This project provides accessible medical guidance, household health management, and visual symptom analysis using state-of-the-art AI.
 
 
 
-## 🚀 Features
+## 🌟 Key Features
 
-### 1. Secure Authentication & Verification
-* **Real-time OTP:** Identity verification via Gmail SMTP and Nodemailer to ensure secure user registration.
-* **Role-Based Access:** Dedicated login flows for Patients and Administrators (Admin: healthchat88@gmail.com).
+### 👨‍👩‍👧‍👦 Household Management
+* **Family Sub-Profiles:** Manage health records for up to 4 members (Primary user + 3 family members) under a single account.
+* **Separated Data:** Each member maintains their own medical history, allergies, and chat history.
 
-### 2. Digital Health Profile
-* **Contextual Data:** Securely store and update personal details, chronic conditions, allergies, and current medications.
-* **Data Persistence:** Built on Supabase (PostgreSQL) for reliable data retrieval and updates.
+### 🤖 Intelligence & Vision
+* **Multimodal Analysis:** Upload images of skin conditions or allergies for instant visual analysis.
+* **Smart Context:** The AI references specific patient profiles (Age, Medications, History) before providing advice.
+* **Powered by Llama 4 Scout:** Utilizing high-speed inference via Groq for near-instant responses.
 
-### 3. Cloud Medical Records
-* **File Uploads:** Integrated Supabase Storage for uploading PDF reports and medical documents.
-* **Instant Sync:** View and manage uploaded records directly within the user profile.
+### 🌍 Accessibility & Language
+* **Multilingual Support:** Communicate in **Tamil, Hindi, Telugu, Kannada, and English**.
+* **Voice Input (STT):** Speak your symptoms in regional languages—perfect for those who struggle with typing.
+* **Voice Output (TTS):** The AI reads responses aloud with natural Indian accents.
 
-### 4. Smart AI Chatbot (Gemini 1.5 Flash)
-* **Context-Aware Analysis:** The AI fetches the user's Supabase profile to provide personalized medical guidance.
-* **Emergency Detection:** High-priority keyword scanning (e.g., "chest pain") triggers immediate emergency alerts to call 108.
-* **RAG Implementation:** Simulates Retrieval-Augmented Generation by enriching AI prompts with patient history.
+### 🛡️ Admin & Security
+* **Command Center:** Admin dashboard to moderate content, suspend users, and view household stats.
+* **Broadcast System:** Send mass email updates (vaccination alerts, health tips) via the Admin panel.
+* **Secure Storage:** All medical reports and chats are encrypted and stored in Supabase.
 
----
 
-## 🛠️ Tech Stack
 
-* **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind CSS
-* **Backend:** Next.js API Routes (Serverless)
-* **Database:** Supabase (PostgreSQL)
-* **Storage:** Supabase Storage (Cloud Buckets)
-* **AI Engine:** Google Gemini 1.5 Flash API
-* **Communication:** Nodemailer (SMTP Service)
+## 🚀 Tech Stack
 
----
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | React, Next.js 15, Tailwind CSS |
+| **Backend** | Next.js API Routes, Node.js |
+| **Database** | Supabase (PostgreSQL) |
+| **AI Model** | Meta Llama 4 Scout (via Groq SDK) |
+| **Storage** | Supabase Storage (Buckets) |
+| **Communication** | Nodemailer (SMTP) |
+| **Tools** | html2pdf.js, Lucide Icons, Web Speech API |
