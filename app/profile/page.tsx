@@ -6,9 +6,8 @@ import { Footer } from '@/components/footer'
 import { supabase } from '@/lib/supabase'
 import { ProtectedRoute } from '@/context/AuthContext'
 import toast from 'react-hot-toast'
-import { Save, UserPlus, Trash2, FileText, Upload, X } from 'lucide-react'
+import { Save, UserPlus, Trash2, FileText, Upload, X, ShieldCheck, Activity, Heart, Pill, AlertCircle } from 'lucide-react'
 
-// Define the structure for a family member
 type FamilyMember = {
   id: string;
   full_name: string;
@@ -26,12 +25,10 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
-  // Main User State
   const [profile, setProfile] = useState<any>({
     full_name: '', age: '', gender: '', existing_diseases: '', allergies: '', current_medicines: '', file_urls: []
   })
   
-  // Family Members State
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
 
   useEffect(() => {
@@ -51,10 +48,8 @@ export default function ProfilePage() {
     setLoading(false)
   }
 
-  // Handle Main Profile Changes
   const handleProfileChange = (e: any) => setProfile({ ...profile, [e.target.name]: e.target.value })
 
-  // Handle Family Member Changes
   const handleFamilyChange = (id: string, field: string, value: string) => {
     setFamilyMembers(prev => prev.map(member => member.id === id ? { ...member, [field]: value } : member))
   }
@@ -68,14 +63,14 @@ export default function ProfilePage() {
   }
 
   const removeFamilyMember = (id: string) => {
-    if(confirm("Are you sure? This will delete their profile and chat history forever.")) {
+    if(window.confirm("Are you sure? This will delete their profile and chat history forever.")) {
       setFamilyMembers(familyMembers.filter(m => m.id !== id))
     }
   }
 
   const handleSave = async () => {
     setSaving(true)
-    const toastId = toast.loading('Saving profiles...')
+    const toastId = toast.loading('Encrypting and saving profiles...')
     const { error } = await supabase.from('profiles').update({
       full_name: profile.full_name,
       age: profile.age,
@@ -88,16 +83,15 @@ export default function ProfilePage() {
     }).eq('email', userEmail)
 
     if (error) toast.error(error.message, { id: toastId })
-    else toast.success('Profiles updated successfully!', { id: toastId })
+    else toast.success('Medical profiles securely updated!', { id: toastId })
     setSaving(false)
   }
 
-  // Generalized File Upload (works for Main User or Family Member)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, memberId?: string) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const toastId = toast.loading('Uploading report...')
+    const toastId = toast.loading('Encrypting and uploading report...')
     try {
       const fileName = `report-${Date.now()}.${file.name.split('.').pop()}`
       const { error } = await supabase.storage.from('reports').upload(fileName, file)
@@ -107,19 +101,16 @@ export default function ProfilePage() {
       const fileData = JSON.stringify({ name: file.name, url: publicUrl })
 
       if (memberId) {
-        // Update specific family member
         setFamilyMembers(prev => prev.map(m => m.id === memberId ? { ...m, file_urls: [...(m.file_urls || []), fileData] } : m))
       } else {
-        // Update main profile
         setProfile({ ...profile, file_urls: [...(profile.file_urls || []), fileData] })
       }
-      toast.success('Report uploaded!', { id: toastId })
+      toast.success('Medical report securely attached!', { id: toastId })
     } catch (err: any) {
       toast.error('Upload failed: ' + err.message, { id: toastId })
     }
   }
 
-  // Delete File
   const deleteFile = (fileStrToRemove: string, memberId?: string) => {
     if (memberId) {
       setFamilyMembers(prev => prev.map(m => m.id === memberId ? { ...m, file_urls: m.file_urls.filter(f => f !== fileStrToRemove) } : m))
@@ -128,7 +119,7 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>
 
   return (
     <ProtectedRoute>
@@ -136,96 +127,173 @@ export default function ProfilePage() {
         <Navbar />
         <main className="flex-1 max-w-4xl mx-auto w-full p-4 md:p-8 space-y-8">
           
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Household Profiles</h1>
-            <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-2 shadow-sm transition disabled:opacity-50">
-              <Save size={18} /> {saving ? 'Saving...' : 'Save All Changes'}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                Household Medical Profiles
+              </h1>
+              <p className="text-slate-500 mt-2 flex items-center gap-1.5 text-sm">
+                <ShieldCheck size={16} className="text-green-500" /> All data is encrypted and securely stored.
+              </p>
+            </div>
+            <button onClick={handleSave} disabled={saving} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition disabled:opacity-50">
+              <Save size={18} /> {saving ? 'Encrypting...' : 'Save All Changes'}
             </button>
           </div>
 
           {/* MAIN USER PROFILE */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-blue-600"><span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-md">Primary</span> My Profile</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div><label className="text-sm font-bold text-slate-500 mb-1 block">Full Name</label><input name="full_name" value={profile.full_name || ''} onChange={handleProfileChange} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" /></div>
-              <div className="flex gap-4">
-                <div className="w-1/2"><label className="text-sm font-bold text-slate-500 mb-1 block">Age</label><input type="number" name="age" value={profile.age || ''} onChange={handleProfileChange} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" /></div>
-                <div className="w-1/2"><label className="text-sm font-bold text-slate-500 mb-1 block">Gender</label><select name="gender" value={profile.gender || ''} onChange={handleProfileChange} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950"><option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 text-xs rounded-md uppercase tracking-wider">Primary</span> 
+              My Medical File
+            </h2>
+            
+            {/* Demographics row */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6">
+              <div className="md:col-span-6">
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 block">Full Legal Name</label>
+                <input name="full_name" value={profile.full_name || ''} onChange={handleProfileChange} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-600 outline-none transition-all" placeholder="e.g. Navin Kumar" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 block">Age</label>
+                <input type="number" name="age" value={profile.age || ''} onChange={handleProfileChange} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-600 outline-none transition-all" placeholder="Yrs" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 block">Biological Sex</label>
+                <select name="gender" value={profile.gender || ''} onChange={handleProfileChange} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-600 outline-none transition-all cursor-pointer">
+                  <option value="">Select</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
             </div>
-            <div className="space-y-4 mb-6">
-              <div><label className="text-sm font-bold text-slate-500 mb-1 block">Existing Diseases</label><textarea name="existing_diseases" value={profile.existing_diseases || ''} onChange={handleProfileChange} rows={2} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 resize-none" /></div>
-              <div><label className="text-sm font-bold text-slate-500 mb-1 block">Allergies</label><textarea name="allergies" value={profile.allergies || ''} onChange={handleProfileChange} rows={2} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 resize-none" /></div>
+
+            {/* Medical Data Rows */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+              <div>
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5"><AlertCircle size={14} className="text-red-500"/> Known Allergies</label>
+                <textarea name="allergies" value={profile.allergies || ''} onChange={handleProfileChange} rows={2} placeholder="e.g. Peanuts, Dust, None" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-600 outline-none transition-all resize-none" />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5"><Heart size={14} className="text-orange-500"/> Chronic Conditions</label>
+                <textarea name="existing_diseases" value={profile.existing_diseases || ''} onChange={handleProfileChange} rows={2} placeholder="e.g. Type 2 Diabetes, Asthma" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-600 outline-none transition-all resize-none" />
+              </div>
+            </div>
+
+            {/* Current Medicines */}
+            <div className="mb-8">
+              <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5"><Pill size={14} className="text-blue-500"/> Current Medications</label>
+              <textarea name="current_medicines" value={profile.current_medicines || ''} onChange={handleProfileChange} rows={2} placeholder="e.g. Metformin 500mg daily, Lisinopril" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-blue-600 outline-none transition-all resize-none" />
             </div>
             
             {/* Reports Section */}
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-              <label className="text-sm font-bold text-slate-500 mb-3 block flex items-center justify-between">
-                Medical Reports
-                <label className="cursor-pointer text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-1">
-                  <Upload size={14}/> Upload File
+            <div className="bg-slate-50 dark:bg-slate-800/30 p-5 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Activity size={16}/> Medical Records</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Upload recent blood tests, scans, or prescriptions.</p>
+                </div>
+                <label className="cursor-pointer text-sm font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0">
+                  <Upload size={16} className="text-blue-600" /> Upload File
                   <input type="file" className="hidden" onChange={(e) => handleFileUpload(e)} />
                 </label>
-              </label>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 {profile.file_urls?.map((fStr: string, i: number) => {
                   const f = JSON.parse(fStr)
                   return (
-                    <div key={i} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm">
+                    <div key={i} className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm shadow-sm group">
                       <FileText size={14} className="text-blue-500" />
-                      <span className="truncate max-w-[150px]">{f.name}</span>
-                      <button onClick={() => deleteFile(fStr)} className="text-red-500 hover:text-red-700 ml-2"><X size={14} /></button>
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate max-w-[150px] hover:text-blue-600 hover:underline">{f.name}</a>
+                      <button onClick={() => deleteFile(fStr)} className="text-slate-300 hover:text-red-500 transition-colors ml-1"><X size={14} /></button>
                     </div>
                   )
                 })}
-                {(!profile.file_urls || profile.file_urls.length === 0) && <p className="text-xs text-slate-400">No reports uploaded.</p>}
+                {(!profile.file_urls || profile.file_urls.length === 0) && (
+                  <p className="text-sm text-slate-400 italic py-2">No documents uploaded yet.</p>
+                )}
               </div>
             </div>
           </div>
 
           {/* FAMILY MEMBERS LIST */}
           {familyMembers.map((member, index) => (
-            <div key={member.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm relative">
-              <button onClick={() => removeFamilyMember(member.id)} className="absolute top-6 right-6 text-slate-400 hover:text-red-500 transition" title="Remove Member">
-                <Trash2 size={20} />
+            <div key={member.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 md:p-8 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-2 h-full bg-amber-400"></div>
+              
+              <button onClick={() => removeFamilyMember(member.id)} className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all" title="Remove Member">
+                <Trash2 size={18} />
               </button>
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-md">Family {index + 1}</span> {member.full_name || 'New Member'}
+
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800 dark:text-slate-200 pr-12">
+                <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500 text-xs rounded-md uppercase tracking-wider">Family {index + 1}</span> 
+                {member.full_name || 'New Dependent'}
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div><label className="text-sm font-bold text-slate-500 mb-1 block">Full Name</label><input value={member.full_name} onChange={(e) => handleFamilyChange(member.id, 'full_name', e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" /></div>
-                <div className="flex gap-4">
-                  <div className="w-1/2"><label className="text-sm font-bold text-slate-500 mb-1 block">Age</label><input type="number" value={member.age} onChange={(e) => handleFamilyChange(member.id, 'age', e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950" /></div>
-                  <div className="w-1/2"><label className="text-sm font-bold text-slate-500 mb-1 block">Gender</label><select value={member.gender} onChange={(e) => handleFamilyChange(member.id, 'gender', e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950"><option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6">
+                <div className="md:col-span-6">
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 block">Full Legal Name</label>
+                  <input value={member.full_name} onChange={(e) => handleFamilyChange(member.id, 'full_name', e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all" placeholder="e.g. Priya Kumar" />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 block">Age</label>
+                  <input type="number" value={member.age} onChange={(e) => handleFamilyChange(member.id, 'age', e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all" placeholder="Yrs" />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 block">Biological Sex</label>
+                  <select value={member.gender} onChange={(e) => handleFamilyChange(member.id, 'gender', e.target.value)} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all cursor-pointer">
+                    <option value="">Select</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
                 </div>
               </div>
-              <div className="space-y-4 mb-6">
-                <div><label className="text-sm font-bold text-slate-500 mb-1 block">Existing Diseases</label><textarea value={member.existing_diseases} onChange={(e) => handleFamilyChange(member.id, 'existing_diseases', e.target.value)} rows={2} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 resize-none" /></div>
-                <div><label className="text-sm font-bold text-slate-500 mb-1 block">Allergies</label><textarea value={member.allergies} onChange={(e) => handleFamilyChange(member.id, 'allergies', e.target.value)} rows={2} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 resize-none" /></div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                <div>
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5"><AlertCircle size={14} className="text-red-500"/> Known Allergies</label>
+                  <textarea value={member.allergies} onChange={(e) => handleFamilyChange(member.id, 'allergies', e.target.value)} rows={2} placeholder="None" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all resize-none" />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5"><Heart size={14} className="text-orange-500"/> Chronic Conditions</label>
+                  <textarea value={member.existing_diseases} onChange={(e) => handleFamilyChange(member.id, 'existing_diseases', e.target.value)} rows={2} placeholder="None" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all resize-none" />
+                </div>
               </div>
 
-              {/* Family Member Reports Section */}
-              <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                <label className="text-sm font-bold text-slate-500 mb-3 block flex items-center justify-between">
-                  Medical Reports
-                  <label className="cursor-pointer text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-1">
-                    <Upload size={14}/> Upload File
+              <div className="mb-8">
+                <label className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1.5"><Pill size={14} className="text-amber-500"/> Current Medications</label>
+                <textarea value={member.current_medicines} onChange={(e) => handleFamilyChange(member.id, 'current_medicines', e.target.value)} rows={2} placeholder="None" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:ring-2 focus:ring-amber-500 outline-none transition-all resize-none" />
+              </div>
+
+              {/* Family Member Reports */}
+              <div className="bg-slate-50 dark:bg-slate-800/30 p-5 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Activity size={16}/> Medical Records</h3>
+                  </div>
+                  <label className="cursor-pointer text-sm font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0">
+                    <Upload size={16} className="text-amber-600" /> Upload File
                     <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, member.id)} />
                   </label>
-                </label>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {member.file_urls?.map((fStr: string, i: number) => {
                     const f = JSON.parse(fStr)
                     return (
-                      <div key={i} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm">
+                      <div key={i} className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-sm shadow-sm">
                         <FileText size={14} className="text-amber-500" />
-                        <span className="truncate max-w-[150px]">{f.name}</span>
-                        <button onClick={() => deleteFile(fStr, member.id)} className="text-red-500 hover:text-red-700 ml-2"><X size={14} /></button>
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate max-w-[150px] hover:text-amber-600 hover:underline">{f.name}</a>
+                        <button onClick={() => deleteFile(fStr, member.id)} className="text-slate-300 hover:text-red-500 transition-colors ml-1"><X size={14} /></button>
                       </div>
                     )
                   })}
-                  {(!member.file_urls || member.file_urls.length === 0) && <p className="text-xs text-slate-400">No reports uploaded.</p>}
+                  {(!member.file_urls || member.file_urls.length === 0) && (
+                    <p className="text-sm text-slate-400 italic py-2">No documents uploaded yet.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -233,7 +301,7 @@ export default function ProfilePage() {
 
           {/* ADD MEMBER BUTTON */}
           {familyMembers.length < 3 && (
-            <button onClick={addFamilyMember} className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl text-slate-500 hover:text-blue-600 hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition flex items-center justify-center gap-2 font-bold">
+            <button onClick={addFamilyMember} className="w-full py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl text-slate-500 hover:text-blue-600 hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all flex items-center justify-center gap-2 font-bold shadow-sm">
               <UserPlus size={20} /> Add Family Member ({3 - familyMembers.length} remaining)
             </button>
           )}

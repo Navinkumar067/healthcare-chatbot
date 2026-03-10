@@ -1,90 +1,127 @@
-"use client"
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { LoadingSpinner } from '@/components/loading-spinner';
+'use client'
+
+import { createContext, useContext, useEffect, useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 interface AuthContextType {
   token: string | null;
-  role: 'user' | 'admin' | null;
-  login: (token: string, role: string) => void;
+  role: string | null;
   logout: () => void;
-  isLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  token: null,
+  role: null,
+  logout: () => {},
+})
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [token, setToken] = useState<string | null>(null);
-  const [role, setRole] = useState<'user' | 'admin' | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const [token, setToken] = useState<string | null>(null)
+  const [role, setRole] = useState<string | null>(null)
+  const [isInitializing, setIsInitializing] = useState(true)
 
   useEffect(() => {
-    // Check for existing session on mount
-    const storedToken = sessionStorage.getItem('token');
-    const storedRole = sessionStorage.getItem('userRole') as 'user' | 'admin' | null;
+    // 1. Initial check of standard manual login
+    const storedEmail = sessionStorage.getItem('userEmail')
+    const storedRole = sessionStorage.getItem('userRole')
     
-    if (storedToken) {
-      setToken(storedToken);
-      setRole(storedRole);
+    if (storedEmail) {
+      setToken(storedEmail)
+      setRole(storedRole || 'user')
     }
-    setIsLoading(false);
-  }, []);
 
-  const login = (newToken: string, newRole: string) => {
-    sessionStorage.setItem('token', newToken);
-    sessionStorage.setItem('userRole', newRole);
-    setToken(newToken);
-    setRole(newRole as 'user' | 'admin');
-  };
+    // 2. Listen for Supabase native auth changes (This catches the Google OAuth redirect!)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        const userEmail = session.user.email;
+        
+        // Sync Google login with your custom sessionStorage
+        sessionStorage.setItem('userEmail', userEmail)
+        sessionStorage.setItem('userRole', 'user')
+        setToken(userEmail)
+        setRole('user')
 
-  const logout = () => {
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('userRole');
-    setToken(null);
-    setRole(null);
-    router.push('/login');
-  };
+        // Check if this Google user exists in the profiles table yet
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', userEmail)
+          .single()
+
+        // If they don't exist, create a profile for them automatically!
+        if (!existingProfile) {
+          await supabase.from('profiles').insert([{
+            email: userEmail,
+            full_name: session.user.user_metadata?.full_name || 'Google User',
+            role: 'user'
+          }])
+        }
+        
+        // If they just logged in and are stuck on the auth pages, push them to the dashboard
+        if (window.location.pathname === '/login' || window.location.pathname === '/signup') {
+            router.push('/dashboard')
+        }
+      } else if (event === 'SIGNED_OUT') {
+        sessionStorage.clear()
+        setToken(null)
+        setRole(null)
+      }
+      
+      setIsInitializing(false)
+    })
+
+    // Fail-safe timeout to stop loading if no session is found
+    const timeout = setTimeout(() => setIsInitializing(false), 1000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
+  }, [router])
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    sessionStorage.clear()
+    setToken(null)
+    setRole(null)
+    router.push('/login')
+  }
 
   return (
-    <AuthContext.Provider value={{ token, role, login, logout, isLoading }}>
-      {children}
+    <AuthContext.Provider value={{ token, role, logout }}>
+      {/* Wait for Google Auth to initialize before rendering protected pages */}
+      {isInitializing && pathname !== '/login' && pathname !== '/signup' && pathname !== '/' ? (
+         <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+         </div>
+      ) : children}
     </AuthContext.Provider>
-  );
-};
+  )
+}
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-};
+export const useAuth = () => useContext(AuthContext)
 
-// Protected Route Wrapper Component
-export const ProtectedRoute = ({ children, allowedRoles = [] }: { children: React.ReactNode, allowedRoles?: string[] }) => {
-  const { token, role, isLoading } = useAuth();
-  const router = useRouter();
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { token } = useAuth()
+  const router = useRouter()
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    if (!isLoading) {
-      if (!token) {
-        router.push('/login');
-      } else if (allowedRoles.length > 0 && !allowedRoles.includes(role || '')) {
-        router.push('/'); 
+    // Wait briefly to let the AuthContext sync up with Supabase
+    const timer = setTimeout(() => {
+      if (!sessionStorage.getItem('userEmail')) {
+        router.push('/login')
+      } else {
+        setIsReady(true)
       }
-    }
-  }, [isLoading, token, role, router]);
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [router, token])
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <LoadingSpinner size="lg" text="Checking authentication..." />
-      </div>
-    );
-  }
-  
-  if (!token || (allowedRoles.length > 0 && !allowedRoles.includes(role || ''))) {
-    return null; // Render nothing while redirecting
-  }
+  if (!isReady) return null
 
-  return <>{children}</>;
-};
+  return <>{children}</>
+}

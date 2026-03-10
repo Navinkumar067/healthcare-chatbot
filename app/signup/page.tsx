@@ -1,167 +1,224 @@
 'use client'
 
-import { supabase } from '@/lib/supabase'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Navbar } from '@/components/navbar'
-import { Footer } from '@/components/footer'
-import { LoadingSpinner } from '@/components/loading-spinner'
-import { Chrome, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
+import { Eye, EyeOff, ShieldCheck, Mail, Lock, User, Phone } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-
-const signupSchema = z.object({
-  fullName: z.string().min(2, 'Full name is required'),
-  email: z.string().email('Invalid email address'),
-  phoneNumber: z.string().regex(/^\d{10}$/, 'Must be a 10-digit number'),
-  age: z.string().refine(val => parseInt(val) >= 18, 'Must be at least 18'),
-  gender: z.string().min(1, 'Select gender'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  confirmPassword: z.string(),
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-})
-
-type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function SignupPage() {
   const router = useRouter()
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-
-  const { register, handleSubmit, formState: { errors } } = useForm<SignupFormValues>({
-    resolver: zodResolver(signupSchema)
+  
+  // Professional Form State
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    password: ''
   })
 
-  const onSubmit = async (data: SignupFormValues) => {
-    setIsLoading(true)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
+
+  const handleGoogleSignup = async () => {
     try {
-      // 1. Check if user exists AND if they are banned
-      const { data: existingUsers } = await supabase
-        .from('profiles')
-        .select('email, is_banned')
-        .eq('email', data.email)
-
-      if (existingUsers && existingUsers.length > 0) {
-        // Feature: Block banned users from re-signing up or logging in
-        if (existingUsers[0].is_banned) {
-          toast.error('This account has been suspended by an Admin.', { icon: '🚫' })
-          setIsLoading(false)
-          return
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
         }
+      })
+      if (error) throw error
+    } catch (error: any) {
+      toast.error('Google sign in failed. Please configure Google OAuth in your Supabase Dashboard.')
+    }
+  }
 
-        toast.error('This email is already registered. Please log in.')
-        setIsLoading(false)
-        return
-      }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    
+    if (!formData.phone || formData.phone.length < 10) {
+      toast.error('Please enter a valid phone number.')
+      setIsLoading(false)
+      return
+    }
 
-      // 2. Temporarily store data and send OTP
-      localStorage.setItem('userData', JSON.stringify(data))
-      const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString()
-      sessionStorage.setItem('expectedOTP', generatedOTP)
-      
-      const response = await fetch('/api/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: data.email, otp: generatedOTP }),
+    try {
+      // 1. Sign up the user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
       })
 
-      if (!response.ok) throw new Error('Failed to send email')
-      
-      toast.success(`OTP Sent successfully to ${data.email}!`)
-      router.push('/verify-otp')
-    } catch (error) {
-      toast.error('Failed to send OTP email. Please try again.')
+      if (authError) throw authError
+
+      // 2. Create the strict profile entry with the locked phone number
+      const { error: profileError } = await supabase.from('profiles').insert([
+        { 
+          email: formData.email,
+          full_name: formData.fullName,
+          phone: formData.phone, // Captured securely at signup
+          role: 'user'
+        }
+      ])
+
+      if (profileError) throw profileError
+
+      toast.success('Account created successfully! Please verify your email.')
+      router.push('/login')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create account')
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <Navbar />
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 dark:bg-slate-950">
+      
+      {/* Left Side - Professional Branding & Trust */}
+      <div className="w-full md:w-5/12 bg-blue-600 p-8 md:p-12 flex flex-col justify-between text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-800 opacity-20 rounded-full blur-3xl translate-y-1/3 -translate-x-1/3"></div>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md space-y-8 bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
-            <p className="text-sm text-slate-500 mt-2">Join HealthChat to get instant AI medical advice</p>
+        <div className="relative z-10">
+          <Link href="/" className="flex items-center space-x-3 group mb-12">
+            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-lg">
+              <span className="text-blue-600 font-bold text-xl leading-none">H</span>
+            </div>
+            <span className="font-bold text-2xl tracking-tight">HealthChat</span>
+          </Link>
+
+          <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">Your health data, <br/>secured & private.</h1>
+          <p className="text-blue-100 text-lg mb-8 max-w-md leading-relaxed">
+            Join thousands of users accessing AI-powered medical insights, prescription scanning, and longitudinal health tracking.
+          </p>
+        </div>
+
+        <div className="relative z-10 mt-12 pt-8 border-t border-blue-500/30">
+          <p className="text-blue-200 text-sm">© 2026 HealthChat Intelligence.</p>
+        </div>
+      </div>
+
+      {/* Right Side - Signup Form */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-md space-y-8">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Create an account</h2>
+            <p className="text-slate-500 mt-2">Enter your details to get started.</p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
-              <input {...register('fullName')} placeholder="John Doe" className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition" />
-              {errors.fullName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.fullName.message}</p>}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Google OAuth Button */}
+            <button 
+              type="button" 
+              onClick={handleGoogleSignup}
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold py-3 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238598)">
+                  <path fill="#4285F4" d="M -3.264,51.509 C -3.264,50.719 -3.334,49.969 -3.454,49.239 L -14.754,49.239 L -14.754,53.749 L -8.284,53.749 C -8.574,55.229 -9.424,56.479 -10.684,57.329 L -10.684,60.329 L -6.824,60.329 C -4.564,58.239 -3.264,55.159 -3.264,51.509 z"></path>
+                  <path fill="#34A853" d="M -14.754,63.239 C -11.514,63.239 -8.804,62.159 -6.824,60.329 L -10.684,57.329 C -11.764,58.049 -13.134,58.489 -14.754,58.489 C -17.884,58.489 -20.534,56.379 -21.484,53.529 L -25.464,53.529 L -25.464,56.619 C -23.494,60.539 -19.444,63.239 -14.754,63.239 z"></path>
+                  <path fill="#FBBC05" d="M -21.484,53.529 C -21.734,52.809 -21.864,52.039 -21.864,51.239 C -21.864,50.439 -21.724,49.669 -21.484,48.949 L -21.484,45.859 L -25.464,45.859 C -26.284,47.479 -26.754,49.299 -26.754,51.239 C -26.754,53.179 -26.284,54.999 -25.464,56.619 L -21.484,53.529 z"></path>
+                  <path fill="#EA4335" d="M -14.754,43.989 C -12.984,43.989 -11.404,44.599 -10.154,45.789 L -6.734,41.939 C -8.804,40.009 -11.514,38.989 -14.754,38.989 C -19.444,38.989 -23.494,41.689 -25.464,45.859 L -21.484,48.949 C -20.534,46.099 -17.884,43.989 -14.754,43.989 z"></path>
+                </g>
+              </svg>
+              Continue with Google
+            </button>
+
+            <div className="flex items-center justify-center space-x-3 text-slate-400">
+              <hr className="flex-1 border-slate-200 dark:border-slate-800" />
+              <span className="text-xs font-bold uppercase tracking-widest">Or register with email</span>
+              <hr className="flex-1 border-slate-200 dark:border-slate-800" />
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
-              <input type="email" {...register('email')} placeholder="john@example.com" className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition" />
-              {errors.email && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.email.message}</p>}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
-                <input {...register('phoneNumber')} placeholder="9876543210" maxLength={10} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition" />
-                {errors.phoneNumber && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.phoneNumber.message}</p>}
+            <div className="space-y-4">
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  name="fullName"
+                  required
+                  placeholder="Full Legal Name"
+                  value={formData.fullName}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                />
               </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Age</label>
-                <input type="number" {...register('age')} placeholder="18" className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition" />
-                {errors.age && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.age.message}</p>}
+
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  placeholder="Email Address"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="tel"
+                  name="phone"
+                  required
+                  placeholder="Phone Number (Required for Alerts)"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  required
+                  placeholder="Create a strong password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-12 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Gender</label>
-              <select {...register('gender')} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition">
-                <option value="">Select gender</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
-              {errors.gender && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.gender.message}</p>}
-            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              By creating an account, you agree to our <Link href="#" className="text-blue-600 hover:underline">Terms of Service</Link> and acknowledge our <Link href="#" className="text-blue-600 hover:underline">Privacy Policy</Link>.
+            </p>
 
-            <div>
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Password</label>
-              <input type="password" {...register('password')} placeholder="••••••••" className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition" />
-              {errors.password && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.password.message}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label>
-              <input type="password" {...register('confirmPassword')} placeholder="••••••••" className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-950 focus:ring-2 focus:ring-blue-600 outline-none border-slate-200 dark:border-slate-800 transition" />
-              {errors.confirmPassword && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {errors.confirmPassword.message}</p>}
-            </div>
-
-            <button type="submit" disabled={isLoading} className="w-full py-3 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm transition duration-200 flex items-center justify-center disabled:opacity-70">
-              {isLoading ? <LoadingSpinner size="sm" /> : 'Create Account'}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md shadow-blue-500/20 disabled:opacity-70 flex items-center justify-center"
+            >
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 
-          <div className="relative pt-4">
-            <div className="absolute inset-0 flex items-center mt-4"><div className="w-full border-t border-slate-200 dark:border-slate-800"></div></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white dark:bg-slate-900 px-2 text-slate-400 font-bold">OR</span></div>
-          </div>
-
-          <button type="button" className="w-full py-3 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition duration-200 font-bold text-sm">
-            <Chrome size={18} className="text-blue-500" /> Continue with Google
-          </button>
-
-          <div className="text-center text-sm pt-2">
-            <span className="text-slate-500">Already have an account?</span>
-            <Link href="/login" className="ml-1 text-blue-600 font-bold hover:text-blue-700 transition">Log in</Link>
-          </div>
+          <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+            Already have an account?{' '}
+            <Link href="/login" className="font-bold text-blue-600 dark:text-blue-400 hover:underline">
+              Sign in here
+            </Link>
+          </p>
         </div>
-      </main>
-
-      <Footer />
+      </div>
     </div>
   )
 }

@@ -36,8 +36,10 @@ export function Navbar() {
   // Helper function to dynamically set desktop link classes
   const getLinkClass = (path: string, extraClasses: string = "") => {
     const isActive = pathname === path;
-    const activeStyles = 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/30';
-    const inactiveStyles = 'text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30';
+    
+    // Updated: Made active state visibly darker and added an even darker hover state
+    const activeStyles = 'text-blue-700 bg-blue-200 hover:bg-blue-300 dark:text-blue-300 dark:bg-blue-900/50 dark:hover:bg-blue-900/70';
+    const inactiveStyles = 'text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800/50';
     
     return `px-3 py-2 text-sm font-medium rounded-md transition-colors ${isActive ? activeStyles : inactiveStyles} ${extraClasses}`.trim();
   }
@@ -45,10 +47,12 @@ export function Navbar() {
   // Helper function to dynamically set mobile link classes
   const getMobileLinkClass = (path: string) => {
     const isActive = pathname === path;
-    const activeStyles = 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-slate-800';
-    const inactiveStyles = 'text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800';
     
-    return `block px-3 py-2 text-base font-medium rounded-md ${isActive ? activeStyles : inactiveStyles}`.trim();
+    // Updated: Matching mobile active and hover states
+    const activeStyles = 'text-blue-700 bg-blue-100 hover:bg-blue-200 dark:text-blue-300 dark:bg-blue-900/50 dark:hover:bg-blue-900/70';
+    const inactiveStyles = 'text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800/50';
+    
+    return `block px-3 py-2 text-base font-medium rounded-md transition-colors ${isActive ? activeStyles : inactiveStyles}`.trim();
   }
 
   return (
@@ -78,6 +82,9 @@ export function Navbar() {
                     Admin Panel
                   </Link>
                 )}
+                <Link href="/dashboard" className={getLinkClass('/dashboard')}>
+                   Dashboard
+                </Link>
                 <Link href="/chatbot" className={getLinkClass('/chatbot')}>
                   Chatbot
                 </Link>
@@ -94,7 +101,8 @@ export function Navbar() {
                 <Link href="/login" className={getLinkClass('/login')}>
                   Login
                 </Link>
-                <Link href="/signup" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors ml-2">
+                {/* REMOVED background color here */}
+                <Link href="/signup" className={getLinkClass('/signup', 'ml-1')}>
                   Sign Up
                 </Link>
               </>
@@ -134,14 +142,16 @@ export function Navbar() {
                   {role === 'admin' && (
                     <Link href="/admin-panel" className={getMobileLinkClass('/admin-panel')} onClick={() => setIsOpen(false)}>Admin Panel</Link>
                   )}
+                  <Link href="/dashboard" className={getMobileLinkClass('/dashboard')} onClick={() => setIsOpen(false)}>Dashboard</Link>
                   <Link href="/chatbot" className={getMobileLinkClass('/chatbot')} onClick={() => setIsOpen(false)}>Chatbot</Link>
                   <Link href="/profile" className={getMobileLinkClass('/profile')} onClick={() => setIsOpen(false)}>Profile</Link>
-                  <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left block px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md mt-2">Logout</button>
+                  <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left block px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md mt-2 transition-colors">Logout</button>
                 </>
               ) : (
-                <div className="pt-2 flex flex-col gap-2">
-                  <Link href="/login" className="block w-full text-center px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onClick={() => setIsOpen(false)}>Login</Link>
-                  <Link href="/signup" className="block w-full text-center px-3 py-2 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg" onClick={() => setIsOpen(false)}>Sign Up</Link>
+                <div className="pt-2 flex flex-col space-y-1">
+                  <Link href="/login" className={getMobileLinkClass('/login')} onClick={() => setIsOpen(false)}>Login</Link>
+                  {/* REMOVED background color here */}
+                  <Link href="/signup" className={getMobileLinkClass('/signup')} onClick={() => setIsOpen(false)}>Sign Up</Link>
                 </div>
               )}
             </div>

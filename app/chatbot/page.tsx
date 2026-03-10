@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Navbar } from '@/components/navbar'
-import { Send, Bot, User, Loader2, Sparkles, Plus, MessageSquare, Menu, X, Image as ImageIcon, Volume2, Square, Mic, Users, Edit2, Trash2, Check, MoreVertical, Share2 } from 'lucide-react'
+import { Send, Bot, User, Loader2, Sparkles, Plus, MessageSquare, Menu, X, Image as ImageIcon, Volume2, Square, Mic, Users, Edit2, Trash2, Check, MoreVertical, Share2, AlertOctagon, PhoneCall, MapPin, Pill } from 'lucide-react'
 import { ProtectedRoute } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
@@ -39,7 +39,12 @@ export default function ChatbotPage() {
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
+  const [showEmergencyCard, setShowEmergencyCard] = useState(false)
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
+  const [locationLoading, setLocationLoading] = useState(false)
+
   const scrollRef = useRef<HTMLDivElement>(null)
+  const prescriptionRef = useRef<HTMLInputElement>(null)
 
   const activeSession = sessions.find(s => s.id === currentSessionId)
   const messages = activeSession ? activeSession.messages : []
@@ -62,6 +67,9 @@ export default function ChatbotPage() {
       if (data) {
         setUserProfile(data)
         loadPatientSessions(data, 'self') 
+        if (data.preferences?.app?.language) {
+          setSpokenLang(data.preferences.app.language)
+        }
       }
     }
   }
@@ -70,6 +78,7 @@ export default function ChatbotPage() {
     setActivePatientId(patientId)
     loadPatientSessions(userProfile, patientId)
     setIsSidebarOpen(false)
+    setShowEmergencyCard(false)
   }
 
   const loadPatientSessions = (fullProfileData: any, targetPatientId: string) => {
@@ -140,6 +149,7 @@ export default function ChatbotPage() {
     setSessions(updatedSessions)
     setCurrentSessionId(newSession.id)
     syncToDatabase(activePatientId, updatedSessions)
+    setShowEmergencyCard(false) 
   }
 
   const updateSessionState = (sessionId: string, newMessages: ChatMessage[], firstUserMessageContent?: string) => {
@@ -194,34 +204,27 @@ export default function ChatbotPage() {
     if (!sessionToShare || sessionToShare.messages.length <= 1) {
       return toast.error("Cannot share an empty conversation.")
     }
-
     const toastId = toast.loading('Generating shareable link...')
     try {
-      // FIX: Let Supabase generate the ID to avoid crypto.randomUUID crashes on HTTP networks
       const { data, error } = await supabase.from('shared_chats').insert({
         title: sessionToShare.title,
         messages: sessionToShare.messages
       }).select('id').single()
 
       if (error) throw error
-
       const shareUrl = `${window.location.origin}/share/${data.id}`
       
-      // FIX: Safely handle clipboard in local testing environments
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(shareUrl)
         toast.success('Link copied to clipboard!', { id: toastId })
       } else {
         toast.success('Share link generated!', { id: toastId })
-        prompt("Copy this link to share:", shareUrl) // Fallback for HTTP
+        prompt("Copy this link to share:", shareUrl) 
       }
     } catch (err: any) {
-      console.error("Share error:", err);
       toast.error(err.message || 'Failed to share chat.', { id: toastId })
     }
   }
-
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
 
   const handleSpeak = (text: string) => { 
     if (!('speechSynthesis' in window)) return toast.error("Speech not supported")
@@ -230,7 +233,6 @@ export default function ChatbotPage() {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = spokenLang
     const voices = window.speechSynthesis.getVoices()
-    
     const targetVoice = voices.find(v => v.lang === spokenLang || v.lang.replace('_', '-') === spokenLang) 
                      || voices.find(v => v.lang.startsWith(spokenLang.split('-')[0]))
                      || voices.find(v => v.lang.includes('IN'))
@@ -245,32 +247,24 @@ export default function ChatbotPage() {
 
   const stopSpeaking = () => { window.speechSynthesis.cancel(); setIsSpeaking(false) }
 
-  // FIX: Completely Rewritten Microphone logic for stability
   const toggleListening = async () => { 
     if (isListening) { 
       if (recognitionRef.current) recognitionRef.current.stop(); 
       setIsListening(false); 
       return; 
     }
-
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return toast.error("Voice typing is not supported in this browser.");
     
     try {
-      // 1. EXPLICITLY REQUEST PERMISSION FIRST
-      // This forces the browser's "Allow Microphone" popup to appear!
       await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // 2. Start Speech Recognition only after permission is granted
       const recognition = new SpeechRecognition(); 
       recognition.lang = spokenLang; 
       recognition.continuous = true; 
       recognition.interimResults = true;
-      
       let finalTranscript = input; 
 
       recognition.onstart = () => setIsListening(true);
-      
       recognition.onresult = (event: any) => { 
         let interimTranscript = ''; 
         for (let i = event.resultIndex; i < event.results.length; i++) { 
@@ -283,24 +277,15 @@ export default function ChatbotPage() {
           }
         } 
       };
-
       recognition.onerror = (event: any) => { 
-        console.error("Mic error:", event.error);
-        if (event.error === 'not-allowed') {
-          toast.error("Microphone access is blocked by your browser.");
-        }
+        if (event.error === 'not-allowed') toast.error("Microphone access is blocked by your browser.");
         if (event.error !== 'no-speech') setIsListening(false); 
       };
-
       recognition.onend = () => setIsListening(false);
-      
       recognition.start(); 
       recognitionRef.current = recognition;
-      
     } catch (error) {
-      // This catches the error if the user clicks "Block" on the popup
-      console.error("Permission denied:", error);
-      toast.error("Microphone access denied. Please click the lock icon in your URL bar to allow it.");
+      toast.error("Microphone access denied. Please allow it to use voice typing.");
       setIsListening(false);
     }
   }
@@ -311,8 +296,87 @@ export default function ChatbotPage() {
     try {
       const fileName = `chat-img-${Date.now()}.${file.name.split('.').pop()}`
       const { error } = await supabase.storage.from('reports').upload(fileName, file); if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from('reports').getPublicUrl(fileName); setSelectedImage(publicUrl); toast.success('Image attached!', { id: toastId })
+      const { data: { publicUrl } } = supabase.storage.from('reports').getPublicUrl(fileName); 
+      setSelectedImage(publicUrl); 
+      toast.success('Image attached!', { id: toastId })
     } catch (err) { toast.error('Upload failed', { id: toastId }) } finally { setIsUploadingImage(false) }
+  }
+
+  const handlePrescriptionUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setIsUploadingImage(true); 
+    const toastId = toast.loading('Scanning prescription...');
+    try {
+      const fileName = `rx-${Date.now()}.${file.name.split('.').pop()}`
+      const { error } = await supabase.storage.from('reports').upload(fileName, file); 
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage.from('reports').getPublicUrl(fileName); 
+      setSelectedImage(publicUrl); 
+      
+      setInput("Please read this prescription. Extract the medicine names and clearly explain the dosage instructions.");
+      toast.success('Prescription scanned! Click Send to translate.', { id: toastId })
+    } catch (err) { toast.error('Upload failed', { id: toastId }) } 
+    finally { 
+      setIsUploadingImage(false);
+      if(prescriptionRef.current) prescriptionRef.current.value = '';
+    }
+  }
+
+  const triggerEmergencyMode = () => {
+    setShowEmergencyCard(true)
+    if (navigator.geolocation) {
+      setLocationLoading(true)
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
+          setLocationLoading(false)
+        },
+        (error) => {
+          setLocationLoading(false)
+          toast.error("Could not fetch precise location. Map will use general search.")
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      )
+    } else {
+      toast.error("Geolocation is not supported by your browser.")
+    }
+  }
+
+  // NEW: Save Reminder to Database
+  const createReminderInDB = async (medicine: string, time: string) => {
+    const toastId = toast.loading(`Setting reminder for ${medicine}...`)
+    try {
+      const { error } = await supabase.from('medicine_reminders').insert({
+        user_email: userEmail,
+        medicine_name: medicine,
+        reminder_time: time
+      })
+      if (error) throw error
+      
+      // We render a beautiful custom toast to confirm
+      toast.custom((t) => (
+        <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}>
+          <div className="flex-1 w-0 p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 pt-0.5">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <Pill className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium text-gray-900">Reminder Set!</p>
+                <p className="mt-1 text-sm text-gray-500">We will notify you to take <span className="font-bold">{medicine}</span> at <span className="font-bold text-blue-600">{time}</span>.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ), { id: toastId, duration: 4000 })
+      
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to save reminder.', { id: toastId })
+    }
   }
 
   const handleSend = async () => {
@@ -343,7 +407,47 @@ export default function ChatbotPage() {
       })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || "Server error")
-      updateSessionState(currentSessionId, [...updatedMessages, { role: 'bot', content: data.text }])
+      
+      let botResponseText = data.text;
+      
+      // 1. Check for Emergency Tag
+      let isEmergencyDetected = false;
+      if (botResponseText.toUpperCase().includes('[EMERGENCY]')) {
+        isEmergencyDetected = true;
+        botResponseText = botResponseText.replace(/\[EMERGENCY\]/gi, '').trim();
+      } 
+      else {
+        const botLower = botResponseText.toLowerCase();
+        const userLower = userMsg.content.toLowerCase();
+        const isBotPanicking = botLower.includes('immediate medical attention') || botLower.includes('emergency room') || botLower.includes('call 108') || botLower.includes('life-threatening');
+        const isUserPanicking = userLower.includes('chest pain') || userLower.includes('breathe') || userLower.includes('heart attack') || userLower.includes('stroke') || userLower.includes('bleeding');
+        
+        if (isBotPanicking && isUserPanicking) {
+          isEmergencyDetected = true;
+        }
+      }
+
+      // 2. NEW: Check for Reminder Tag using Regex
+      const reminderRegex = /\[SET_REMINDER:\s*(.*?)\s*\|\s*(.*?)\]/i;
+      const reminderMatch = botResponseText.match(reminderRegex);
+      
+      if (reminderMatch) {
+        const medicineName = reminderMatch[1];
+        const reminderTime = reminderMatch[2];
+        
+        // Remove the hidden tag from the text the user actually sees
+        botResponseText = botResponseText.replace(reminderMatch[0], '').trim();
+        
+        // Trigger the database save
+        createReminderInDB(medicineName, reminderTime);
+      }
+
+      updateSessionState(currentSessionId, [...updatedMessages, { role: 'bot', content: botResponseText }])
+      
+      if (isEmergencyDetected) {
+        triggerEmergencyMode();
+      }
+
     } catch (err: any) {
       toast.error(err.message)
       updateSessionState(currentSessionId, [...updatedMessages, { role: 'bot', content: "Connection error. Please try again." }])
@@ -351,6 +455,8 @@ export default function ChatbotPage() {
       setIsTyping(false)
     }
   }
+
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping, showEmergencyCard])
 
   return (
     <ProtectedRoute>
@@ -399,6 +505,7 @@ export default function ChatbotPage() {
                     onClick={() => { 
                       setCurrentSessionId(s.id); 
                       setIsSidebarOpen(false);
+                      setShowEmergencyCard(false); 
                     }}
                   >
                     <div className={`flex-1 flex items-center gap-3 overflow-hidden ${isActiveChat ? 'text-blue-700 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-300'}`}>
@@ -456,7 +563,7 @@ export default function ChatbotPage() {
             </div>
           </aside>
 
-          <main className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950">
+          <main className="flex-1 flex flex-col h-full bg-white dark:bg-slate-950 relative">
             <div className="p-4 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-900 flex items-center gap-3 shrink-0">
               <button className="md:hidden p-2 -ml-2 text-slate-500" onClick={() => setIsSidebarOpen(true)}><Menu size={24} /></button>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${activePatientId === 'self' ? 'bg-blue-600' : 'bg-amber-500'}`}><Sparkles size={16} /></div>
@@ -468,6 +575,33 @@ export default function ChatbotPage() {
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> analyzing records</p>
               </div>
             </div>
+
+            {showEmergencyCard && (
+              <div className="absolute top-20 left-4 right-4 md:left-10 md:right-10 z-30 bg-red-50 dark:bg-red-900/20 border-2 border-red-500 rounded-2xl p-4 shadow-xl shadow-red-500/10 flex flex-col sm:flex-row gap-4 items-center justify-between animate-in fade-in slide-in-from-top-4">
+                <div className="flex items-start gap-3">
+                  <div className="bg-red-500 text-white p-2 rounded-full shrink-0">
+                    <AlertOctagon size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-red-700 dark:text-red-400 font-bold text-lg leading-tight">Emergency Detected</h3>
+                    <p className="text-red-600/80 dark:text-red-400/80 text-sm">Please seek immediate medical attention.</p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <a href="tel:108" className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-colors">
+                    <PhoneCall size={18} className="animate-pulse" /> Call 108
+                  </a>
+                  <a href={userLocation ? `https://www.google.com/maps/search/hospital+or+clinic/@${userLocation.lat},${userLocation.lng},14z` : `https://www.google.com/maps/search/hospital+or+clinic`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-4 py-2.5 rounded-xl font-medium shadow-sm transition-colors">
+                    {locationLoading ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
+                    {locationLoading ? "Locating..." : "Nearby Clinics"}
+                  </a>
+                  <button onClick={() => setShowEmergencyCard(false)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 p-1">
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar bg-white dark:bg-slate-950">
               {messages.map((m, i) => (
@@ -501,20 +635,33 @@ export default function ChatbotPage() {
                   </div>
                 </div>
               )}
-              <div ref={scrollRef} />
+              <div ref={scrollRef} className="h-4" />
             </div>
 
-            <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900 shrink-0">
+            <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900 shrink-0 relative z-40">
               <div className="relative max-w-4xl mx-auto flex flex-col gap-2">
+                
+                <div className="flex items-center gap-2 px-1 mb-1">
+                  <button 
+                    onClick={() => prescriptionRef.current?.click()} 
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-lg hover:bg-blue-100 dark:hover:bg-slate-700 transition shadow-sm"
+                  >
+                    <Pill size={14} /> Scan Prescription
+                  </button>
+                  <input type="file" accept="image/*" className="hidden" ref={prescriptionRef} onChange={handlePrescriptionUpload} disabled={isUploadingImage} />
+                  <input type="file" accept="image/*" className="hidden" id="general-image-upload" onChange={handleImageUpload} disabled={isUploadingImage} />
+                </div>
+
                 {selectedImage && (
                   <div className="relative w-24 h-24 rounded-xl overflow-hidden border-2 border-blue-500 shadow-md">
                     <img src={selectedImage} alt="preview" className="w-full h-full object-cover" />
                     <button onClick={() => setSelectedImage(null)} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 hover:bg-black transition"><X size={14} /></button>
                   </div>
                 )}
+                
                 <div className="relative flex items-center">
-                  <label className="absolute left-2 p-2 text-slate-400 hover:text-blue-600 cursor-pointer transition">
-                    <ImageIcon size={22} /><input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploadingImage} />
+                  <label htmlFor="general-image-upload" className="absolute left-2 p-2 text-slate-400 hover:text-blue-600 cursor-pointer transition">
+                    <ImageIcon size={22} />
                   </label>
                   
                   <input 
@@ -527,17 +674,17 @@ export default function ChatbotPage() {
                   <div className="absolute right-14 flex items-center gap-1 sm:gap-2">
                     <select value={spokenLang} onChange={(e) => setSpokenLang(e.target.value)} className="bg-transparent text-[10px] sm:text-xs text-slate-500 font-bold uppercase outline-none cursor-pointer hover:text-blue-600 transition max-w-[80px] sm:max-w-[120px] truncate">
                       <option value="en-IN">English</option>
-                      <option value="hi-IN">हिंदी</option>
+                      <option value="hi-IN">Hindi</option>
                       <option value="ta-IN">தமிழ்</option>
-                      <option value="te-IN">తెలుగు</option>
-                      <option value="kn-IN">ಕನ್ನಡ</option>
-                      <option value="ml-IN">മലയാളം</option>
-                      <option value="mr-IN">मराठी</option>
-                      <option value="bn-IN">বাংলা</option>
-                      <option value="gu-IN">ગુજરાતી</option>
-                      <option value="pa-IN">ਪੰਜਾਬੀ</option>
-                      <option value="or-IN">ଓଡ଼ିଆ</option>
-                      <option value="ur-IN">اردو</option>
+                      <option value="te-IN">Telugu</option>
+                      <option value="kn-IN">Kannada</option>
+                      <option value="ml-IN">Malayalam</option>
+                      <option value="mr-IN">Marathi</option>
+                      <option value="bn-IN">Bengali</option>
+                      <option value="gu-IN">Gujarati</option>
+                      <option value="pa-IN">Punjabi</option>
+                      <option value="or-IN">Odia</option>
+                      <option value="ur-IN">Urdu</option>
                     </select>
                     <button type="button" onClick={toggleListening} className={`p-2 rounded-full transition ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-slate-400 hover:text-blue-600'}`}><Mic size={20} /></button>
                   </div>

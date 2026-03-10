@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
     try {
-        // 1. Extract the selected language from the request
         const { message, imageUrl, history, profile, language } = await req.json();
 
         if (!process.env.GROQ_API_KEY) {
@@ -23,7 +22,6 @@ export async function POST(req: Request) {
             recordsText = `Uploaded Medical Reports: ${files}`;
         }
 
-        // 2. Map the language code to the readable language name
         const languageMap: Record<string, string> = {
             'en-IN': 'English',
             'hi-IN': 'Hindi',
@@ -40,28 +38,38 @@ export async function POST(req: Request) {
         };
         const targetLanguage = languageMap[language] || 'English';
 
-        // 3. STRICTLY enforce the language inside the system prompt
+        // UPDATED SYSTEM PROMPT: Added REMINDER PROTOCOL
         const systemPrompt = `
-          You are HealthChat AI, a professional medical assistant.
+You are HealthChat AI, a highly professional medical assistant.
+
+*** EMERGENCY PROTOCOL ***
+If the user mentions ANY life-threatening symptoms (e.g., severe chest pain, difficulty breathing, severe bleeding, stroke symptoms), YOU MUST PREPEND YOUR RESPONSE WITH THIS EXACT ENGLISH TAG: [EMERGENCY]
+**************************
+
+*** REMINDER PROTOCOL ***
+If you explain a medication dosage or the user asks to be reminded to take a medicine, you MUST ask them: "Would you like me to set a daily reminder for this medicine? If so, what time?"
+If the user explicitly agrees and provides a time (e.g., "Yes, at 9 AM" or "Remind me for Paracetamol at 8 PM"), you MUST append this exact English tag at the very end of your response:
+[SET_REMINDER: Medicine Name | Time]
+Example: [SET_REMINDER: Paracetamol | 08:00 PM]
+Do not translate this tag. Keep it in English.
+**************************
           
-          PATIENT CONTEXT:
-          - Name: ${profile?.full_name || 'Unknown'}
-          - Age: ${profile?.age || 'Unknown'}
-          - Gender: ${profile?.gender || 'Unknown'}
-          - Existing Diseases: ${profile?.existing_diseases || 'None reported'}
-          - Allergies: ${profile?.allergies || 'None reported'}
-          - Current Medications: ${profile?.current_medicines || 'None reported'}
-          - ${recordsText}
+PATIENT CONTEXT:
+- Name: ${profile?.full_name || 'Unknown'}
+- Age: ${profile?.age || 'Unknown'}
+- Gender: ${profile?.gender || 'Unknown'}
+- Existing Diseases: ${profile?.existing_diseases || 'None reported'}
+- Allergies: ${profile?.allergies || 'None reported'}
+- Current Medications: ${profile?.current_medicines || 'None reported'}
+- ${recordsText}
 
-          INSTRUCTIONS:
-          1. If the user uploads an image, describe what you see visually, but gently remind them a physical exam is best for a real diagnosis.
-          2. Analyze their diseases and allergies deeply before advising.
-          3. If user mentions "chest pain", "difficulty breathing", "severe bleeding", or "stroke", tell them to call 108 immediately.
-          4. TONE: Be warm, conversational, and direct. Do NOT use repetitive robotic phrases like "I recommend consulting a doctor for proper evaluation" in every single message. Instead, seamlessly weave in casual reminders that you are an AI assistant when appropriate, but focus primarily on answering their question.
-          5. CRITICAL LANGUAGE RULE: You MUST generate your entire response ONLY in ${targetLanguage}. Do not mix languages unless the user specifically asks you to.
-        `;
+INSTRUCTIONS:
+1. PRESCRIPTION OCR: If the user uploads a prescription image, extract the handwritten medicine names. Provide a clear list of the medicines and explain the exact dosage. ALWAYS end by asking if they want a reminder set.
+2. Analyze their diseases and allergies deeply before advising.
+3. TONE: Be warm, conversational, and direct. Do NOT use repetitive robotic phrases.
+4. CRITICAL LANGUAGE RULE: You MUST generate your entire response ONLY in ${targetLanguage}. However, keep the [EMERGENCY] and [SET_REMINDER] tags entirely in English.
+`;
 
-        // Format history for Groq Vision Model
         const formattedHistory = (history || []).map((msg: any) => {
             if (msg.imageUrl) {
                 return {
@@ -78,7 +86,6 @@ export async function POST(req: Request) {
             };
         });
 
-        // Add the current message
         let currentMessageContent: any = message;
         if (imageUrl) {
             currentMessageContent = [
@@ -87,7 +94,6 @@ export async function POST(req: Request) {
             ];
         }
 
-        // Call the new active Llama 4 Vision Model
         const chatCompletion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: systemPrompt },
