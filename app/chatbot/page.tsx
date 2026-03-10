@@ -2,11 +2,18 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Navbar } from '@/components/navbar'
-import { Footer } from '@/components/footer'
-import { Send, Bot, User, AlertTriangle, Loader2, Sparkles, Plus, MessageSquare, Menu, X, Image as ImageIcon, Volume2, Square, Languages, Download, Mic, Users } from 'lucide-react'
+import { Send, Bot, User, Loader2, Sparkles, Plus, MessageSquare, Menu, X, Image as ImageIcon, Volume2, Square, Mic, Users, Edit2, Trash2, Check, MoreVertical, Share2 } from 'lucide-react'
 import { ProtectedRoute } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type ChatMessage = { role: string; content: string; imageUrl?: string };
 type ChatSession = { id: string; title: string; messages: ChatMessage[]; updatedAt: number };
@@ -15,18 +22,18 @@ export default function ChatbotPage() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [userEmail, setUserEmail] = useState('')
   
-  // PATIENT SELECTOR STATE
   const [activePatientId, setActivePatientId] = useState<string>('self')
-  
-  // CURRENT PATIENT'S CHAT SESSIONS
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
   
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isListening, setIsListening] = useState(false)
-  const [spokenLang, setSpokenLang] = useState('ta-IN')
+  const [spokenLang, setSpokenLang] = useState('en-IN')
   const recognitionRef = useRef<any>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
@@ -39,6 +46,8 @@ export default function ChatbotPage() {
 
   useEffect(() => {
     fetchProfile()
+    if ('speechSynthesis' in window) window.speechSynthesis.getVoices()
+    
     return () => {
       window.speechSynthesis.cancel()
       if (recognitionRef.current) recognitionRef.current.stop()
@@ -52,12 +61,11 @@ export default function ChatbotPage() {
       const { data } = await supabase.from('profiles').select('*').eq('email', email).single()
       if (data) {
         setUserProfile(data)
-        loadPatientSessions(data, 'self') // Load main user by default
+        loadPatientSessions(data, 'self') 
       }
     }
   }
 
-  // Handle Switching Patients
   const handlePatientSwitch = (patientId: string) => {
     setActivePatientId(patientId)
     loadPatientSessions(userProfile, patientId)
@@ -78,32 +86,28 @@ export default function ChatbotPage() {
       }
     }
 
-    // Handle Legacy format migration
     if (targetHistory.length > 0 && targetHistory[0].role) {
       const migratedSession: ChatSession = { id: Date.now().toString(), title: 'Previous Conversation', messages: targetHistory, updatedAt: Date.now() }
-      setSessions([migratedSession])
-      setCurrentSessionId(migratedSession.id)
-      syncToDatabase(targetPatientId, [migratedSession], fullProfileData)
-    } else if (targetHistory.length > 0) {
-      setSessions(targetHistory)
-      setCurrentSessionId(targetHistory[0].id)
-    } else {
-      // Create fresh session
-      const newSession: ChatSession = {
-        id: Date.now().toString(),
-        title: 'New Conversation',
-        messages: [{ role: 'bot', content: `Hello ${targetName}! I have safely loaded your specific medical records. How can I assist you today?` }],
-        updatedAt: Date.now()
-      }
-      setSessions([newSession])
-      setCurrentSessionId(newSession.id)
-      syncToDatabase(targetPatientId, [newSession], fullProfileData)
+      targetHistory = [migratedSession]
     }
+
+    const cleanedHistory = targetHistory.filter((s: ChatSession) => s.messages.length > 1 || s.title !== 'New Conversation')
+
+    const newSession: ChatSession = {
+      id: Date.now().toString(),
+      title: 'New Conversation',
+      messages: [{ role: 'bot', content: `Hello ${targetName}! I have safely loaded your specific medical records. How can I assist you today?` }],
+      updatedAt: Date.now()
+    }
+
+    const newSessionsList = [newSession, ...cleanedHistory]
+    setSessions(newSessionsList)
+    setCurrentSessionId(newSession.id)
+    syncToDatabase(targetPatientId, newSessionsList, fullProfileData)
   }
 
   const syncToDatabase = async (patientId: string, updatedSessions: ChatSession[], currentProfileData = userProfile) => {
     if (!currentProfileData || !userEmail) return
-
     let dbUpdate = {}
     if (patientId === 'self') {
       dbUpdate = { chat_history: updatedSessions }
@@ -115,7 +119,6 @@ export default function ChatbotPage() {
       dbUpdate = { family_members: updatedFamily }
       setUserProfile({ ...currentProfileData, family_members: updatedFamily })
     }
-
     await supabase.from('profiles').update(dbUpdate).eq('email', userEmail)
   }
 
@@ -143,7 +146,7 @@ export default function ChatbotPage() {
     let updatedSessions = sessions.map(s => {
       if (s.id === sessionId) {
         let newTitle = s.title
-        if (firstUserMessageContent && s.messages.length === 1) {
+        if (firstUserMessageContent && s.messages.length === 1 && s.title === 'New Conversation') {
           newTitle = firstUserMessageContent.slice(0, 25) + (firstUserMessageContent.length > 25 ? '...' : '')
         }
         return { ...s, messages: newMessages, title: newTitle, updatedAt: Date.now() }
@@ -155,46 +158,154 @@ export default function ChatbotPage() {
     syncToDatabase(activePatientId, updatedSessions)
   }
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
-
-  const downloadPDF = async () => { /* ... (Same as before) ... */ 
-    const element = document.getElementById('chat-download-area')
-    if (!element) return
-    const toastId = toast.loading('Generating PDF...')
-    try {
-      //@ts-ignore
-      const html2pdf = (await import('html2pdf.js')).default
-      const opt = { margin: 0.5, filename: `HealthChat-${activeSession?.title || 'Session'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' } }
-      await html2pdf().set(opt).from(element).save()
-      toast.success('PDF downloaded safely!', { id: toastId })
-    } catch (err) { toast.error('Failed to generate PDF', { id: toastId }) }
+  const startEditing = (id: string, currentTitle: string, e?: any) => {
+    if(e && e.stopPropagation) e.stopPropagation()
+    setEditingSessionId(id)
+    setEditTitle(currentTitle)
   }
 
-  const handleSpeak = (text: string) => { /* ... (Same as before) ... */ 
+  const saveEdit = (id: string, e?: any) => {
+    if(e && e.stopPropagation) e.stopPropagation()
+    if (!editTitle.trim()) {
+      setEditingSessionId(null)
+      return
+    }
+    const updatedSessions = sessions.map(s => s.id === id ? { ...s, title: editTitle } : s)
+    setSessions(updatedSessions)
+    syncToDatabase(activePatientId, updatedSessions)
+    setEditingSessionId(null)
+  }
+
+  const deleteSession = (id: string, e?: any) => {
+    if(e && e.stopPropagation) e.stopPropagation()
+    const updatedSessions = sessions.filter(s => s.id !== id)
+    setSessions(updatedSessions)
+    syncToDatabase(activePatientId, updatedSessions)
+    
+    if (currentSessionId === id) {
+      if (updatedSessions.length > 0) setCurrentSessionId(updatedSessions[0].id)
+      else createNewSession()
+    }
+  }
+
+  const handleShare = async (sessionId: string, e?: any) => {
+    if(e && e.stopPropagation) e.stopPropagation()
+    const sessionToShare = sessions.find(s => s.id === sessionId)
+    if (!sessionToShare || sessionToShare.messages.length <= 1) {
+      return toast.error("Cannot share an empty conversation.")
+    }
+
+    const toastId = toast.loading('Generating shareable link...')
+    try {
+      // FIX: Let Supabase generate the ID to avoid crypto.randomUUID crashes on HTTP networks
+      const { data, error } = await supabase.from('shared_chats').insert({
+        title: sessionToShare.title,
+        messages: sessionToShare.messages
+      }).select('id').single()
+
+      if (error) throw error
+
+      const shareUrl = `${window.location.origin}/share/${data.id}`
+      
+      // FIX: Safely handle clipboard in local testing environments
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareUrl)
+        toast.success('Link copied to clipboard!', { id: toastId })
+      } else {
+        toast.success('Share link generated!', { id: toastId })
+        prompt("Copy this link to share:", shareUrl) // Fallback for HTTP
+      }
+    } catch (err: any) {
+      console.error("Share error:", err);
+      toast.error(err.message || 'Failed to share chat.', { id: toastId })
+    }
+  }
+
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
+
+  const handleSpeak = (text: string) => { 
     if (!('speechSynthesis' in window)) return toast.error("Speech not supported")
     window.speechSynthesis.cancel()
+    
     const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = spokenLang
     const voices = window.speechSynthesis.getVoices()
-    const indianVoice = voices.find(v => v.lang.startsWith('hi-') || v.lang.startsWith('ta-') || v.lang.startsWith('te-') || v.lang.startsWith('kn-') || v.lang.includes('IN'))
-    if (indianVoice) utterance.voice = indianVoice
-    utterance.onstart = () => setIsSpeaking(true); utterance.onend = () => setIsSpeaking(false); utterance.onerror = () => setIsSpeaking(false)
+    
+    const targetVoice = voices.find(v => v.lang === spokenLang || v.lang.replace('_', '-') === spokenLang) 
+                     || voices.find(v => v.lang.startsWith(spokenLang.split('-')[0]))
+                     || voices.find(v => v.lang.includes('IN'))
+
+    if (targetVoice) utterance.voice = targetVoice
+
+    utterance.onstart = () => setIsSpeaking(true) 
+    utterance.onend = () => setIsSpeaking(false) 
+    utterance.onerror = () => setIsSpeaking(false)
     window.speechSynthesis.speak(utterance)
   }
 
   const stopSpeaking = () => { window.speechSynthesis.cancel(); setIsSpeaking(false) }
 
-  const toggleListening = () => { /* ... (Same as before) ... */ 
-    if (isListening) { if (recognitionRef.current) recognitionRef.current.stop(); setIsListening(false); return; }
+  // FIX: Completely Rewritten Microphone logic for stability
+  const toggleListening = async () => { 
+    if (isListening) { 
+      if (recognitionRef.current) recognitionRef.current.stop(); 
+      setIsListening(false); 
+      return; 
+    }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return toast.error("Voice typing is not supported.");
-    const recognition = new SpeechRecognition(); recognition.lang = spokenLang; recognition.continuous = false; recognition.interimResults = true;
-    recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (event: any) => { let currentTranscript = ''; for (let i = event.resultIndex; i < event.results.length; i++) { currentTranscript += event.results[i][0].transcript; } setInput(currentTranscript); };
-    recognition.onerror = () => setIsListening(false); recognition.onend = () => setIsListening(false);
-    recognition.start(); recognitionRef.current = recognition;
+    if (!SpeechRecognition) return toast.error("Voice typing is not supported in this browser.");
+    
+    try {
+      // 1. EXPLICITLY REQUEST PERMISSION FIRST
+      // This forces the browser's "Allow Microphone" popup to appear!
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // 2. Start Speech Recognition only after permission is granted
+      const recognition = new SpeechRecognition(); 
+      recognition.lang = spokenLang; 
+      recognition.continuous = true; 
+      recognition.interimResults = true;
+      
+      let finalTranscript = input; 
+
+      recognition.onstart = () => setIsListening(true);
+      
+      recognition.onresult = (event: any) => { 
+        let interimTranscript = ''; 
+        for (let i = event.resultIndex; i < event.results.length; i++) { 
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + ' ';
+            setInput(finalTranscript);
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+            setInput(finalTranscript + interimTranscript);
+          }
+        } 
+      };
+
+      recognition.onerror = (event: any) => { 
+        console.error("Mic error:", event.error);
+        if (event.error === 'not-allowed') {
+          toast.error("Microphone access is blocked by your browser.");
+        }
+        if (event.error !== 'no-speech') setIsListening(false); 
+      };
+
+      recognition.onend = () => setIsListening(false);
+      
+      recognition.start(); 
+      recognitionRef.current = recognition;
+      
+    } catch (error) {
+      // This catches the error if the user clicks "Block" on the popup
+      console.error("Permission denied:", error);
+      toast.error("Microphone access denied. Please click the lock icon in your URL bar to allow it.");
+      setIsListening(false);
+    }
   }
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { /* ... (Same as before) ... */ 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { 
     const file = e.target.files?.[0]; if (!file) return;
     setIsUploadingImage(true); const toastId = toast.loading('Attaching image...');
     try {
@@ -213,7 +324,6 @@ export default function ChatbotPage() {
     if (isSpeaking) stopSpeaking()
     if (isListening) toggleListening()
 
-    // Package the CORRECT patient's profile to send to the AI
     let activeProfileToAnalyze = userProfile
     if (activePatientId !== 'self') {
       activeProfileToAnalyze = userProfile.family_members.find((m: any) => m.id === activePatientId)
@@ -223,7 +333,13 @@ export default function ChatbotPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.content, imageUrl: userMsg.imageUrl, history: messages, profile: activeProfileToAnalyze }),
+        body: JSON.stringify({ 
+          message: userMsg.content, 
+          imageUrl: userMsg.imageUrl, 
+          history: messages, 
+          profile: activeProfileToAnalyze,
+          language: spokenLang 
+        }),
       })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || "Server error")
@@ -245,7 +361,6 @@ export default function ChatbotPage() {
 
           <aside className={`absolute md:relative z-50 w-72 h-full bg-slate-50 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
             
-            {/* PATIENT SELECTOR DROPDOWN */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Active Patient</label>
               <div className="relative">
@@ -270,12 +385,73 @@ export default function ChatbotPage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-              <p className="text-xs font-bold text-slate-400 uppercase px-2 mb-3">Recent History</p>
-              {sessions.map(s => (
-                <button key={s.id} onClick={() => { setCurrentSessionId(s.id); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition ${currentSessionId === s.id ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium' : 'hover:bg-slate-200/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
-                  <MessageSquare size={18} className="shrink-0" /><div className="truncate text-sm">{s.title}</div>
-                </button>
-              ))}
+              <p className="text-xs font-bold text-slate-400 uppercase px-2 mb-3">Chats</p>
+              
+              {sessions.map(s => {
+                const isActiveChat = currentSessionId === s.id;
+                const isEditing = editingSessionId === s.id;
+
+                return (
+                  <div 
+                    key={s.id} 
+                    className={`group relative flex items-center justify-between px-3 py-3 rounded-xl transition cursor-pointer 
+                      ${isActiveChat ? 'bg-blue-100 dark:bg-blue-900/30' : 'hover:bg-slate-200/50 dark:hover:bg-slate-800'}`} 
+                    onClick={() => { 
+                      setCurrentSessionId(s.id); 
+                      setIsSidebarOpen(false);
+                    }}
+                  >
+                    <div className={`flex-1 flex items-center gap-3 overflow-hidden ${isActiveChat ? 'text-blue-700 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-300'}`}>
+                      <MessageSquare size={18} className="shrink-0" />
+                      
+                      {isEditing ? (
+                        <div className="flex flex-1 items-center gap-1 pr-2">
+                          <input 
+                            value={editTitle} 
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => { if(e.key === 'Enter') saveEdit(s.id, e); if(e.key === 'Escape') setEditingSessionId(null); }}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={() => saveEdit(s.id)}
+                            autoFocus
+                            className="flex-1 bg-white dark:bg-slate-950 border border-blue-300 rounded px-1.5 py-0.5 text-sm outline-none text-slate-900 dark:text-slate-100 w-full"
+                          />
+                          <button onClick={(e) => saveEdit(s.id, e)} className="shrink-0 p-1 text-blue-600 hover:text-blue-700 transition"><Check size={16} /></button>
+                        </div>
+                      ) : (
+                        <div className="truncate text-sm pr-8">{s.title}</div>
+                      )}
+                    </div>
+
+                    {!isEditing && (
+                      <div className="absolute right-2 flex items-center z-10">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button 
+                              type="button"
+                              onClick={(e) => e.stopPropagation()} 
+                              className={`p-1.5 transition rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 data-[state=open]:bg-slate-200 dark:data-[state=open]:bg-slate-700 data-[state=open]:text-slate-600 dark:data-[state=open]:text-slate-200 data-[state=open]:opacity-100 ${isActiveChat ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-36 rounded-xl border-slate-200 dark:border-slate-700 shadow-xl p-1 z-[100]">
+                            <DropdownMenuItem onClick={(e) => startEditing(s.id, s.title, e)} className="gap-2 cursor-pointer text-slate-700 dark:text-slate-300 rounded-lg">
+                              <Edit2 size={14} /> Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => handleShare(s.id, e)} className="gap-2 cursor-pointer text-slate-700 dark:text-slate-300 rounded-lg">
+                              <Share2 size={14} /> Share
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-700 my-1" />
+                            <DropdownMenuItem onClick={(e) => deleteSession(s.id, e)} className="gap-2 cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-900/20 rounded-lg font-medium">
+                              <Trash2 size={14} /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
               {sessions.length === 0 && <p className="px-2 text-xs text-slate-400 italic">No history for this patient.</p>}
             </div>
           </aside>
@@ -291,13 +467,9 @@ export default function ChatbotPage() {
                 </h2>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> analyzing records</p>
               </div>
-              
-              <button onClick={downloadPDF} className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-100 hover:text-blue-600 transition rounded-lg border border-slate-200 dark:border-slate-700">
-                <Download size={14} /> <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Save PDF</span>
-              </button>
             </div>
 
-            <div id="chat-download-area" className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar bg-white dark:bg-slate-950">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar bg-white dark:bg-slate-950">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`flex gap-3 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -308,7 +480,7 @@ export default function ChatbotPage() {
                       {m.imageUrl && <img src={m.imageUrl} alt="Uploaded" className="max-w-full sm:max-w-[250px] rounded-xl mb-3 border border-white/20" />}
                       <span>{m.content}</span>
                       {m.role === 'bot' && (
-                        <div className="flex items-center gap-3 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700" data-html2canvas-ignore>
+                        <div className="flex items-center gap-3 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
                           <button onClick={() => handleSpeak(m.content)} className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-600 transition">
                             <Volume2 size={12} /> Listen
                           </button>
@@ -320,7 +492,7 @@ export default function ChatbotPage() {
                 </div>
               ))}
               {isTyping && (
-                <div className="flex justify-start gap-3" data-html2canvas-ignore>
+                <div className="flex justify-start gap-3">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><Loader2 size={14} className="animate-spin text-blue-600" /></div>
                   <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl rounded-tl-none flex gap-1 items-center">
                     <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
@@ -353,8 +525,21 @@ export default function ChatbotPage() {
                   />
                   
                   <div className="absolute right-14 flex items-center gap-1 sm:gap-2">
-                    <select value={spokenLang} onChange={(e) => setSpokenLang(e.target.value)} className="bg-transparent text-[10px] sm:text-xs text-slate-500 font-bold uppercase outline-none cursor-pointer hover:text-blue-600 transition"><option value="ta-IN">தமிழ்</option><option value="hi-IN">हिंदी</option><option value="te-IN">తెలుగు</option><option value="kn-IN">ಕನ್ನಡ</option><option value="en-IN">ENG</option></select>
-                    <button onClick={toggleListening} className={`p-2 rounded-full transition ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-slate-400 hover:text-blue-600'}`}><Mic size={20} /></button>
+                    <select value={spokenLang} onChange={(e) => setSpokenLang(e.target.value)} className="bg-transparent text-[10px] sm:text-xs text-slate-500 font-bold uppercase outline-none cursor-pointer hover:text-blue-600 transition max-w-[80px] sm:max-w-[120px] truncate">
+                      <option value="en-IN">English</option>
+                      <option value="hi-IN">हिंदी</option>
+                      <option value="ta-IN">தமிழ்</option>
+                      <option value="te-IN">తెలుగు</option>
+                      <option value="kn-IN">ಕನ್ನಡ</option>
+                      <option value="ml-IN">മലയാളം</option>
+                      <option value="mr-IN">मराठी</option>
+                      <option value="bn-IN">বাংলা</option>
+                      <option value="gu-IN">ગુજરાતી</option>
+                      <option value="pa-IN">ਪੰਜਾਬੀ</option>
+                      <option value="or-IN">ଓଡ଼ିଆ</option>
+                      <option value="ur-IN">اردو</option>
+                    </select>
+                    <button type="button" onClick={toggleListening} className={`p-2 rounded-full transition ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-slate-400 hover:text-blue-600'}`}><Mic size={20} /></button>
                   </div>
 
                   <button onClick={handleSend} disabled={isTyping || isUploadingImage || (!input.trim() && !selectedImage) || !currentSessionId} className={`absolute right-2 p-2 text-white rounded-xl transition disabled:opacity-50 ${activePatientId === 'self' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'}`}>

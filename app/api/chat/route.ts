@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
     try {
-        const { message, imageUrl, history, profile } = await req.json();
+        // 1. Extract the selected language from the request
+        const { message, imageUrl, history, profile, language } = await req.json();
 
         if (!process.env.GROQ_API_KEY) {
             return NextResponse.json(
@@ -22,6 +23,24 @@ export async function POST(req: Request) {
             recordsText = `Uploaded Medical Reports: ${files}`;
         }
 
+        // 2. Map the language code to the readable language name
+        const languageMap: Record<string, string> = {
+            'en-IN': 'English',
+            'hi-IN': 'Hindi',
+            'ta-IN': 'Tamil',
+            'te-IN': 'Telugu',
+            'kn-IN': 'Kannada',
+            'ml-IN': 'Malayalam',
+            'mr-IN': 'Marathi',
+            'bn-IN': 'Bengali',
+            'gu-IN': 'Gujarati',
+            'pa-IN': 'Punjabi',
+            'or-IN': 'Odia',
+            'ur-IN': 'Urdu'
+        };
+        const targetLanguage = languageMap[language] || 'English';
+
+        // 3. STRICTLY enforce the language inside the system prompt
         const systemPrompt = `
           You are HealthChat AI, a professional medical assistant.
           
@@ -39,6 +58,7 @@ export async function POST(req: Request) {
           2. Analyze their diseases and allergies deeply before advising.
           3. If user mentions "chest pain", "difficulty breathing", "severe bleeding", or "stroke", tell them to call 108 immediately.
           4. TONE: Be warm, conversational, and direct. Do NOT use repetitive robotic phrases like "I recommend consulting a doctor for proper evaluation" in every single message. Instead, seamlessly weave in casual reminders that you are an AI assistant when appropriate, but focus primarily on answering their question.
+          5. CRITICAL LANGUAGE RULE: You MUST generate your entire response ONLY in ${targetLanguage}. Do not mix languages unless the user specifically asks you to.
         `;
 
         // Format history for Groq Vision Model
