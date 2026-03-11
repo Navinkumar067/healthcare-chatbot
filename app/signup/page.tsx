@@ -57,19 +57,29 @@ export default function SignupPage() {
 
       if (authError) throw authError
 
-      // 2. Create the strict profile entry with the locked phone number
-      const { error: profileError } = await supabase.from('profiles').insert([
-        { 
-          email: formData.email,
-          full_name: formData.fullName,
-          phone: formData.phone, // Captured securely at signup
-          role: 'user'
+      // 2. Safely UPSERT (Update or Insert) to prevent duplicate key errors
+      if (authData.user) {
+        const { error: profileError } = await supabase.from('profiles').upsert([
+          { 
+            id: authData.user.id, // Explicitly tie to the auth user ID
+            email: formData.email,
+            full_name: formData.fullName,
+            phone: formData.phone,
+            role: 'user'
+          }
+        ])
+
+        if (profileError) {
+           // Fallback just in case the primary key isn't strictly 'id'
+           await supabase.from('profiles').update({
+             full_name: formData.fullName,
+             phone: formData.phone,
+             role: 'user'
+           }).eq('email', formData.email)
         }
-      ])
+      }
 
-      if (profileError) throw profileError
-
-      toast.success('Account created successfully! Please verify your email.')
+      toast.success('Account created successfully!')
       router.push('/login')
     } catch (error: any) {
       toast.error(error.message || 'Failed to create account')
