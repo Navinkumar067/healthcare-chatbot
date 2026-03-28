@@ -41,6 +41,7 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    console.log("1. Button clicked, starting signup...")
     
     if (!formData.phone || formData.phone.length < 10) {
       toast.error('Please enter a valid phone number.')
@@ -49,19 +50,24 @@ export default function SignupPage() {
     }
 
     try {
-      // 1. Sign up the user in Supabase Auth
+      console.log("2. Sending request to Supabase Auth...")
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
       })
 
-      if (authError) throw authError
+      if (authError) {
+        console.log("Auth Error Details:", authError)
+        throw authError
+      }
+      
+      console.log("3. User created successfully in Auth!", authData.user?.id)
 
-      // 2. Safely UPSERT (Update or Insert) to prevent duplicate key errors
       if (authData.user) {
+        console.log("4. Attempting to save to Profiles table...")
         const { error: profileError } = await supabase.from('profiles').upsert([
           { 
-            id: authData.user.id, // Explicitly tie to the auth user ID
+            id: authData.user.id,
             email: formData.email,
             full_name: formData.fullName,
             phone: formData.phone,
@@ -70,20 +76,21 @@ export default function SignupPage() {
         ])
 
         if (profileError) {
-           // Fallback just in case the primary key isn't strictly 'id'
-           await supabase.from('profiles').update({
-             full_name: formData.fullName,
-             phone: formData.phone,
-             role: 'user'
-           }).eq('email', formData.email)
+           console.log("Profile Upsert Error:", profileError)
+           throw profileError // We force it to throw the error so we can see it!
         }
+        console.log("5. Profile saved successfully!")
       }
 
+      console.log("6. Redirecting to Login page...")
       toast.success('Account created successfully!')
       router.push('/login')
+      
     } catch (error: any) {
+      console.error("CRITICAL ERROR CAUGHT:", error)
       toast.error(error.message || 'Failed to create account')
     } finally {
+      console.log("7. Process finished, turning off loading spinner.")
       setIsLoading(false)
     }
   }
