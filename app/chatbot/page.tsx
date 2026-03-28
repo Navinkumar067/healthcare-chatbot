@@ -44,7 +44,6 @@ export default function ChatbotPage() {
   const [locationLoading, setLocationLoading] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const prescriptionRef = useRef<HTMLInputElement>(null)
 
   const activeSession = sessions.find(s => s.id === currentSessionId)
   const messages = activeSession ? activeSession.messages : []
@@ -302,27 +301,6 @@ export default function ChatbotPage() {
     } catch (err) { toast.error('Upload failed', { id: toastId }) } finally { setIsUploadingImage(false) }
   }
 
-  const handlePrescriptionUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    setIsUploadingImage(true); 
-    const toastId = toast.loading('Scanning prescription...');
-    try {
-      const fileName = `rx-${Date.now()}.${file.name.split('.').pop()}`
-      const { error } = await supabase.storage.from('reports').upload(fileName, file); 
-      if (error) throw error;
-      
-      const { data: { publicUrl } } = supabase.storage.from('reports').getPublicUrl(fileName); 
-      setSelectedImage(publicUrl); 
-      
-      setInput("Please read this prescription. Extract the medicine names and clearly explain the dosage instructions.");
-      toast.success('Prescription scanned! Click Send to translate.', { id: toastId })
-    } catch (err) { toast.error('Upload failed', { id: toastId }) } 
-    finally { 
-      setIsUploadingImage(false);
-      if(prescriptionRef.current) prescriptionRef.current.value = '';
-    }
-  }
-
   const triggerEmergencyMode = () => {
     setShowEmergencyCard(true)
     if (navigator.geolocation) {
@@ -343,7 +321,6 @@ export default function ChatbotPage() {
     }
   }
 
-  // NEW: Save Reminder to Database
   const createReminderInDB = async (medicine: string, time: string) => {
     const toastId = toast.loading(`Setting reminder for ${medicine}...`)
     try {
@@ -354,7 +331,6 @@ export default function ChatbotPage() {
       })
       if (error) throw error
       
-      // We render a beautiful custom toast to confirm
       toast.custom((t) => (
         <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}>
           <div className="flex-1 w-0 p-4">
@@ -410,7 +386,6 @@ export default function ChatbotPage() {
       
       let botResponseText = data.text;
       
-      // 1. Check for Emergency Tag
       let isEmergencyDetected = false;
       if (botResponseText.toUpperCase().includes('[EMERGENCY]')) {
         isEmergencyDetected = true;
@@ -427,7 +402,6 @@ export default function ChatbotPage() {
         }
       }
 
-      // 2. NEW: Check for Reminder Tag using Regex
       const reminderRegex = /\[SET_REMINDER:\s*(.*?)\s*\|\s*(.*?)\]/i;
       const reminderMatch = botResponseText.match(reminderRegex);
       
@@ -435,10 +409,7 @@ export default function ChatbotPage() {
         const medicineName = reminderMatch[1];
         const reminderTime = reminderMatch[2];
         
-        // Remove the hidden tag from the text the user actually sees
         botResponseText = botResponseText.replace(reminderMatch[0], '').trim();
-        
-        // Trigger the database save
         createReminderInDB(medicineName, reminderTime);
       }
 
@@ -640,17 +611,6 @@ export default function ChatbotPage() {
 
             <div className="p-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900 shrink-0 relative z-40">
               <div className="relative max-w-4xl mx-auto flex flex-col gap-2">
-                
-                <div className="flex items-center gap-2 px-1 mb-1">
-                  <button 
-                    onClick={() => prescriptionRef.current?.click()} 
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-lg hover:bg-blue-100 dark:hover:bg-slate-700 transition shadow-sm"
-                  >
-                    <Pill size={14} /> Scan Prescription
-                  </button>
-                  <input type="file" accept="image/*" className="hidden" ref={prescriptionRef} onChange={handlePrescriptionUpload} disabled={isUploadingImage} />
-                  <input type="file" accept="image/*" className="hidden" id="general-image-upload" onChange={handleImageUpload} disabled={isUploadingImage} />
-                </div>
 
                 {selectedImage && (
                   <div className="relative w-24 h-24 rounded-xl overflow-hidden border-2 border-blue-500 shadow-md">
@@ -660,6 +620,7 @@ export default function ChatbotPage() {
                 )}
                 
                 <div className="relative flex items-center">
+                  <input type="file" accept="image/*" className="hidden" id="general-image-upload" onChange={handleImageUpload} disabled={isUploadingImage} />
                   <label htmlFor="general-image-upload" className="absolute left-2 p-2 text-slate-400 hover:text-blue-600 cursor-pointer transition">
                     <ImageIcon size={22} />
                   </label>
