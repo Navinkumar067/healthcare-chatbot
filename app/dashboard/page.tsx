@@ -33,8 +33,12 @@ export default function DashboardPage() {
     if (email) {
       setUserEmail(email)
       fetchUserProfile(email)
+    } else {
+      // FIXED: Failsafe to break infinite load if email gets cleared
+      setIsLoading(false)
+      router.push('/login')
     }
-  }, [])
+  }, [router])
 
   const fetchUserProfile = async (email: string) => {
     try {
@@ -44,7 +48,7 @@ export default function DashboardPage() {
         .eq('email', email)
         .single()
 
-      if (error) throw error
+      if (error && error.code !== 'PGRST116') throw error
 
       if (data) {
         setUserProfileName(data.full_name || 'User')
@@ -62,7 +66,17 @@ export default function DashboardPage() {
           const timelineEvents = sortedHistory.map((session: any) => {
             const calculatedSeverity = Math.min(Math.max(session.messages.length - 1, 1), 10)
             const firstUserMessage = session.messages.find((m: any) => m.role === 'user')
-            const description = firstUserMessage ? firstUserMessage.content : 'General health consultation.'
+            
+            // Fixed description retrieval to safely handle arrays/vision objects
+            let description = 'General health consultation.';
+            if (firstUserMessage) {
+                if (typeof firstUserMessage.content === 'string') {
+                    description = firstUserMessage.content;
+                } else if (Array.isArray(firstUserMessage.content)) {
+                    const textObj = firstUserMessage.content.find((c: any) => c.type === 'text');
+                    if (textObj) description = textObj.text;
+                }
+            }
 
             return {
               id: session.id,
@@ -83,6 +97,7 @@ export default function DashboardPage() {
       console.error("Error fetching profile data:", err)
       addToast('error', 'Error', 'Failed to load profile data.')
     } finally {
+      // FIXED: Will always run no matter what happens in the block above
       setIsLoading(false)
     }
   }

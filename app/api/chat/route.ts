@@ -38,7 +38,6 @@ export async function POST(req: Request) {
         };
         const targetLanguage = languageMap[language] || 'English';
 
-        // UPDATED SYSTEM PROMPT: Added REMINDER PROTOCOL
         const systemPrompt = `
 You are HealthChat AI, a highly professional medical assistant.
 
@@ -67,7 +66,7 @@ INSTRUCTIONS:
 1. PRESCRIPTION OCR: If the user uploads a prescription image, extract the handwritten medicine names. Provide a clear list of the medicines and explain the exact dosage. ALWAYS end by asking if they want a reminder set.
 2. Analyze their diseases and allergies deeply before advising.
 3. TONE: Be warm, conversational, and direct. Do NOT use repetitive robotic phrases.
-4. CRITICAL LANGUAGE RULE: You MUST generate your entire response ONLY in ${targetLanguage}. However, keep the [EMERGENCY] and [SET_REMINDER] tags entirely in English.
+4. CRITICAL LANGUAGE RULE: You MUST write your ENTIRE response ONLY in ${targetLanguage}. Even when performing Prescription OCR, reading images, or explaining dosages, translate ALL medical advice and findings into ${targetLanguage}. DO NOT output English text alongside the translation. Keep ONLY the [EMERGENCY] and [SET_REMINDER] tags strictly in English.
 `;
 
         const formattedHistory = (history || []).map((msg: any) => {
@@ -100,7 +99,8 @@ INSTRUCTIONS:
                 ...formattedHistory,
                 { role: "user", content: currentMessageContent }
             ],
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            // FIXED: Using Groq's actual Vision model to support image URLs
+            model: "llama-3.2-11b-vision-preview",
             temperature: 0.5,
         });
 

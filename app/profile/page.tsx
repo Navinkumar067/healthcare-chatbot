@@ -36,16 +36,26 @@ export default function ProfilePage() {
   }, [])
 
   const fetchProfile = async () => {
-    const email = sessionStorage.getItem('userEmail')
-    if (email) {
-      setUserEmail(email)
-      const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single()
-      if (data) {
-        setProfile(data)
-        setFamilyMembers(data.family_members || [])
+    try {
+      const email = sessionStorage.getItem('userEmail')
+      if (email) {
+        setUserEmail(email)
+        const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single()
+        
+        if (error && error.code !== 'PGRST116') throw error // Ignore "not found" errors on new accounts
+        
+        if (data) {
+          setProfile(data)
+          setFamilyMembers(data.family_members || [])
+        }
       }
+    } catch (err: any) {
+      console.error("Profile Fetch Error:", err)
+      toast.error("Failed to load profile data.")
+    } finally {
+      // FIXED: Guaranteed to turn off the loading screen
+      setLoading(false) 
     }
-    setLoading(false)
   }
 
   const handleProfileChange = (e: any) => setProfile({ ...profile, [e.target.name]: e.target.value })
