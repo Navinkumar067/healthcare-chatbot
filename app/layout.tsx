@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/react'
 import './globals.css'
 import { Providers } from '@/components/providers'
-import { Toaster } from 'react-hot-toast';
+import { ReminderTracker } from '@/components/reminder-tracker'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
@@ -31,6 +31,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
         <Providers>
+          <ReminderTracker />
           {children}
         </Providers>
         <Analytics />

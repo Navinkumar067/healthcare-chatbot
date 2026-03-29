@@ -229,27 +229,23 @@ export default function ChatbotPage() {
     if (!('speechSynthesis' in window)) return toast.error("Speech not supported in this browser.")
     window.speechSynthesis.cancel()
     
-    // 1. Strip out any leftover markdown or special characters so the bot doesn't read them aloud
     const cleanText = text.replace(/[*#_`~]/g, '').trim();
 
     const utterance = new SpeechSynthesisUtterance(cleanText)
     utterance.lang = spokenLang
-    utterance.rate = 0.85 // Slowed down slightly (default is 1.0) for much better clarity in Tamil/regional languages
+    utterance.rate = 0.85 
     
     const voices = window.speechSynthesis.getVoices()
     
-    // 2. Strict voice matching: Try exact match first, then language prefix match
     let targetVoice = voices.find(v => v.lang.replace('_', '-') === spokenLang) 
                    || voices.find(v => v.lang.startsWith(spokenLang.split('-')[0]))
 
     if (targetVoice) {
       utterance.voice = targetVoice
     } else {
-      // 3. Warn the user if their operating system doesn't have a native voice for this language
       if (spokenLang !== 'en-IN') {
         toast.error(`Warning: Your device does not have a native ${spokenLang} voice installed. It may sound robotic.`, { duration: 4000 })
       }
-      // Fallback to Indian English if exact language is missing
       utterance.voice = voices.find(v => v.lang.includes('IN')) || voices[0]
     }
 
@@ -311,19 +307,16 @@ export default function ChatbotPage() {
     const file = e.target.files?.[0]; 
     if (!file) return;
 
-    // 1. Prevent massive files from freezing the upload (Limit: 5MB)
     const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     if (file.size > MAX_FILE_SIZE) {
       toast.error("Image is too large! Please upload a file smaller than 5MB.");
-      e.target.value = ''; // Reset input
+      e.target.value = ''; 
       return;
     }
 
     setIsUploadingImage(true); 
     const toastId = toast.loading('Attaching image...');
     
-    console.log(`Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
-
     try {
       const fileName = `chat-img-${Date.now()}.${file.name.split('.').pop()}`;
       
@@ -342,13 +335,10 @@ export default function ChatbotPage() {
       toast.success('Image attached!', { id: toastId });
 
     } catch (err: any) { 
-      console.error("Upload Catch Error:", err);
-      // Extract the exact error message so we know what's wrong
       const errorMessage = err.message || "Network error or bucket issue";
       toast.error(`Upload failed: ${errorMessage}`, { id: toastId, duration: 5000 });
     } finally { 
       setIsUploadingImage(false);
-      // 2. Crucial: Reset the file input so you can try uploading the exact same file again if it fails
       e.target.value = ''; 
     }
   }
@@ -481,16 +471,17 @@ export default function ChatbotPage() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping, showEmergencyCard])
 
+  // FIXED: Changed min-h-screen to h-[100dvh] and added overflow-hidden to lock the page height
   return (
     <ProtectedRoute>
-      <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <div className="flex flex-col h-[100dvh] overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
         <Navbar />
         <div className="flex-1 flex overflow-hidden relative">
           {isSidebarOpen && <div className="absolute inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
           <aside className={`absolute md:relative z-50 w-72 h-full bg-slate-50 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
             
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Active Patient</label>
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -507,7 +498,7 @@ export default function ChatbotPage() {
               </div>
             </div>
 
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
               <button onClick={() => { createNewSession(); setIsSidebarOpen(false); }} className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold shadow-sm">
                 <Plus size={18} /> New Chat
               </button>
