@@ -1,15 +1,41 @@
 import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
+// Helper function: Strictly convert image URL to Base64 to bypass Cloudflare/Bot blocks
+async function getSafeBase64Image(url: string) {
+    if (!url) return null;
+    if (url.startsWith('data:image')) return url; // Already base64
+
+    try {
+        const response = await fetch(url, {
+            // ESSENTIAL: Disguise the server request as a Chrome browser so Supabase doesn't block it
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Supabase Server blocked the request with status: ${response.status}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const mimeType = response.headers.get('content-type') || 'image/jpeg';
+
+        return `data:${mimeType};base64,${buffer.toString('base64')}`;
+    } catch (err: any) {
+        console.error("Backend Image Download Error:", err.message);
+        throw new Error(`Server failed to download image. Reason: ${err.message}`);
+    }
+}
+
 export async function POST(req: Request) {
     try {
         const { message, imageUrl, history, profile, language } = await req.json();
 
         if (!process.env.GROQ_API_KEY) {
-            return NextResponse.json(
-                { error: "GROQ_API_KEY is missing from .env.local file." },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "GROQ_API_KEY is missing from .env.local file." }, { status: 500 });
         }
 
         const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -23,18 +49,9 @@ export async function POST(req: Request) {
         }
 
         const languageMap: Record<string, string> = {
-            'en-IN': 'English',
-            'hi-IN': 'Hindi',
-            'ta-IN': 'Tamil',
-            'te-IN': 'Telugu',
-            'kn-IN': 'Kannada',
-            'ml-IN': 'Malayalam',
-            'mr-IN': 'Marathi',
-            'bn-IN': 'Bengali',
-            'gu-IN': 'Gujarati',
-            'pa-IN': 'Punjabi',
-            'or-IN': 'Odia',
-            'ur-IN': 'Urdu'
+            'en-IN': 'English', 'hi-IN': 'Hindi', 'ta-IN': 'Tamil', 'te-IN': 'Telugu',
+            'kn-IN': 'Kannada', 'ml-IN': 'Malayalam', 'mr-IN': 'Marathi', 'bn-IN': 'Bengali',
+            'gu-IN': 'Gujarati', 'pa-IN': 'Punjabi', 'or-IN': 'Odia', 'ur-IN': 'Urdu'
         };
         const targetLanguage = languageMap[language] || 'English';
 
@@ -42,15 +59,12 @@ export async function POST(req: Request) {
 You are HealthChat AI, a highly professional medical assistant.
 
 *** EMERGENCY PROTOCOL ***
-If the user mentions ANY life-threatening symptoms (e.g., severe chest pain, difficulty breathing, severe bleeding, stroke symptoms), YOU MUST PREPEND YOUR RESPONSE WITH THIS EXACT ENGLISH TAG: [EMERGENCY]
+If the user mentions ANY life-threatening symptoms, YOU MUST PREPEND YOUR RESPONSE WITH THIS EXACT ENGLISH TAG: [EMERGENCY]
 **************************
 
 *** REMINDER PROTOCOL ***
-If you explain a medication dosage or the user asks to be reminded to take a medicine, you MUST ask them: "Would you like me to set a daily reminder for this medicine? If so, what time?"
-If the user explicitly agrees and provides a time (e.g., "Yes, at 9 AM" or "Remind me for Paracetamol at 8 PM"), you MUST append this exact English tag at the very end of your response:
+If the user explicitly agrees and provides a time (e.g., "Yes, at 9 AM"), you MUST append this exact English tag at the very end of your response:
 [SET_REMINDER: Medicine Name | Time]
-Example: [SET_REMINDER: Paracetamol | 08:00 PM]
-Do not translate this tag. Keep it in English.
 **************************
           
 PATIENT CONTEXT:
@@ -66,30 +80,42 @@ INSTRUCTIONS:
 1. PRESCRIPTION OCR: If the user uploads a prescription image, extract the handwritten medicine names. Provide a clear list of the medicines and explain the exact dosage. ALWAYS end by asking if they want a reminder set.
 2. Analyze their diseases and allergies deeply before advising.
 3. TONE: Be warm, conversational, and direct. Do NOT use repetitive robotic phrases.
-4. CRITICAL LANGUAGE RULE: You MUST write your ENTIRE response ONLY in ${targetLanguage}. Even when performing Prescription OCR, reading images, or explaining dosages, translate ALL medical advice and findings into ${targetLanguage}. DO NOT output English text alongside the translation. Keep ONLY the [EMERGENCY] and [SET_REMINDER] tags strictly in English.
+4. CRITICAL LANGUAGE RULE: You MUST write your ENTIRE response ONLY in the native script of ${targetLanguage}. Do not use English alphabets for ${targetLanguage} words (e.g., no Tanglish/Hinglish). Translate all medical terms into easily understandable ${targetLanguage}.
+5. FORMATTING: Do NOT use markdown formatting like asterisks (**), hashes (#), or underscores in your response, as this text will be read aloud by a screen reader. Keep the text clean and natural.
 `;
 
-        const formattedHistory = (history || []).map((msg: any) => {
+        // Safely map history and convert any past images to base64
+        const formattedHistory = await Promise.all((history || []).map(async (msg: any) => {
             if (msg.imageUrl) {
-                return {
-                    role: msg.role === 'bot' ? 'assistant' : 'user',
-                    content: [
-                        { type: "text", text: msg.content || "Here is an image." },
-                        { type: "image_url", image_url: { url: msg.imageUrl } }
-                    ]
-                };
+                try {
+                    const safeImg = await getSafeBase64Image(msg.imageUrl);
+                    return {
+                        role: msg.role === 'bot' ? 'assistant' : 'user',
+                        content: [
+                            { type: "text", text: msg.content || "Here is an image." },
+                            { type: "image_url", image_url: { url: safeImg } }
+                        ]
+                    };
+                } catch (e) {
+                    // If an old image fails to load, degrade gracefully to text so we don't break the whole chat
+                    return { role: msg.role === 'bot' ? 'assistant' : 'user', content: msg.content };
+                }
             }
             return {
                 role: msg.role === 'bot' ? 'assistant' : 'user',
                 content: msg.content
             };
-        });
+        }));
 
         let currentMessageContent: any = message;
+
+        // Convert the NEWLY uploaded image to base64. 
+        // If this fails, it will safely throw an error to your frontend instead of crashing Groq.
         if (imageUrl) {
+            const safeImg = await getSafeBase64Image(imageUrl);
             currentMessageContent = [
                 { type: "text", text: message || "Please analyze this image." },
-                { type: "image_url", image_url: { url: imageUrl } }
+                { type: "image_url", image_url: { url: safeImg } }
             ];
         }
 
@@ -99,8 +125,7 @@ INSTRUCTIONS:
                 ...formattedHistory,
                 { role: "user", content: currentMessageContent }
             ],
-            // FIXED: Using Groq's actual Vision model to support image URLs
-            model: "llama-3.2-11b-vision-preview",
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: 0.5,
         });
 

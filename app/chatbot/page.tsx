@@ -104,7 +104,7 @@ export default function ChatbotPage() {
     const newSession: ChatSession = {
       id: Date.now().toString(),
       title: 'New Conversation',
-      messages: [{ role: 'bot', content: `Hello ${targetName}! I have safely loaded your specific medical records. How can I assist you today?` }],
+      messages: [{ role: 'bot', content: `Hello ${targetName}! , How can I assist you today?` }],
       updatedAt: Date.now()
     }
 
@@ -226,21 +226,39 @@ export default function ChatbotPage() {
   }
 
   const handleSpeak = (text: string) => { 
-    if (!('speechSynthesis' in window)) return toast.error("Speech not supported")
+    if (!('speechSynthesis' in window)) return toast.error("Speech not supported in this browser.")
     window.speechSynthesis.cancel()
     
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = spokenLang
-    const voices = window.speechSynthesis.getVoices()
-    const targetVoice = voices.find(v => v.lang === spokenLang || v.lang.replace('_', '-') === spokenLang) 
-                     || voices.find(v => v.lang.startsWith(spokenLang.split('-')[0]))
-                     || voices.find(v => v.lang.includes('IN'))
+    // 1. Strip out any leftover markdown or special characters so the bot doesn't read them aloud
+    const cleanText = text.replace(/[*#_`~]/g, '').trim();
 
-    if (targetVoice) utterance.voice = targetVoice
+    const utterance = new SpeechSynthesisUtterance(cleanText)
+    utterance.lang = spokenLang
+    utterance.rate = 0.85 // Slowed down slightly (default is 1.0) for much better clarity in Tamil/regional languages
+    
+    const voices = window.speechSynthesis.getVoices()
+    
+    // 2. Strict voice matching: Try exact match first, then language prefix match
+    let targetVoice = voices.find(v => v.lang.replace('_', '-') === spokenLang) 
+                   || voices.find(v => v.lang.startsWith(spokenLang.split('-')[0]))
+
+    if (targetVoice) {
+      utterance.voice = targetVoice
+    } else {
+      // 3. Warn the user if their operating system doesn't have a native voice for this language
+      if (spokenLang !== 'en-IN') {
+        toast.error(`Warning: Your device does not have a native ${spokenLang} voice installed. It may sound robotic.`, { duration: 4000 })
+      }
+      // Fallback to Indian English if exact language is missing
+      utterance.voice = voices.find(v => v.lang.includes('IN')) || voices[0]
+    }
 
     utterance.onstart = () => setIsSpeaking(true) 
     utterance.onend = () => setIsSpeaking(false) 
-    utterance.onerror = () => setIsSpeaking(false)
+    utterance.onerror = (e) => {
+      console.error("Speech Synthesis Error:", e);
+      setIsSpeaking(false);
+    }
     window.speechSynthesis.speak(utterance)
   }
 
@@ -290,15 +308,49 @@ export default function ChatbotPage() {
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { 
-    const file = e.target.files?.[0]; if (!file) return;
-    setIsUploadingImage(true); const toastId = toast.loading('Attaching image...');
+    const file = e.target.files?.[0]; 
+    if (!file) return;
+
+    // 1. Prevent massive files from freezing the upload (Limit: 5MB)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("Image is too large! Please upload a file smaller than 5MB.");
+      e.target.value = ''; // Reset input
+      return;
+    }
+
+    setIsUploadingImage(true); 
+    const toastId = toast.loading('Attaching image...');
+    
+    console.log(`Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
     try {
-      const fileName = `chat-img-${Date.now()}.${file.name.split('.').pop()}`
-      const { error } = await supabase.storage.from('reports').upload(fileName, file); if (error) throw error;
+      const fileName = `chat-img-${Date.now()}.${file.name.split('.').pop()}`;
+      
+      const { data, error } = await supabase.storage.from('reports').upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      }); 
+      
+      if (error) {
+        console.error("Supabase Storage Error:", error);
+        throw error;
+      }
+      
       const { data: { publicUrl } } = supabase.storage.from('reports').getPublicUrl(fileName); 
       setSelectedImage(publicUrl); 
-      toast.success('Image attached!', { id: toastId })
-    } catch (err) { toast.error('Upload failed', { id: toastId }) } finally { setIsUploadingImage(false) }
+      toast.success('Image attached!', { id: toastId });
+
+    } catch (err: any) { 
+      console.error("Upload Catch Error:", err);
+      // Extract the exact error message so we know what's wrong
+      const errorMessage = err.message || "Network error or bucket issue";
+      toast.error(`Upload failed: ${errorMessage}`, { id: toastId, duration: 5000 });
+    } finally { 
+      setIsUploadingImage(false);
+      // 2. Crucial: Reset the file input so you can try uploading the exact same file again if it fails
+      e.target.value = ''; 
+    }
   }
 
   const triggerEmergencyMode = () => {

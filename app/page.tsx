@@ -44,12 +44,12 @@ export default function Home() {
                   href="/signup"
                   className="inline-flex items-center justify-center px-8 py-3 border-2 border-blue-600 dark:border-blue-400 text-blue-600 dark:text-blue-400 font-semibold rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
                 >
-                  Sign Up Free
+                  Sign Up
                 </Link>
               </div>
 
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                No credit card required • Available 24/7
+                Available 24/7
               </p>
             </div>
           </div>
@@ -136,7 +136,7 @@ export default function Home() {
               href="/chatbot"
               className="inline-flex items-center justify-center px-8 py-4 bg-white hover:bg-blue-50 text-blue-600 font-semibold rounded-lg transition-colors group"
             >
-              Start Free Chat
+              Start Chat
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>

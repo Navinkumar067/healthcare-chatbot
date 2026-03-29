@@ -59,7 +59,7 @@ export function Footer() {
 
         {/* Bottom Footer */}
         <div className="border-t border-blue-100 dark:border-blue-900 pt-6 flex flex-col sm:flex-row justify-between items-center text-sm text-slate-600 dark:text-slate-400">
-          <p>&copy; 2024 HealthChat. All rights reserved.</p>
+          <p>&copy; 2026 HealthChat. All rights reserved.</p>
           <div className="flex gap-6 mt-4 sm:mt-0">
             <Link href="#" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
               Privacy Policy
