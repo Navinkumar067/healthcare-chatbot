@@ -2,7 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Navbar } from '@/components/navbar'
-import { Send, Bot, User, Loader2, Sparkles, Plus, MessageSquare, Menu, X, Image as ImageIcon, Volume2, Square, Mic, Users, Edit2, Trash2, Check, MoreVertical, Share2, AlertOctagon, PhoneCall, MapPin, Pill } from 'lucide-react'
+import { 
+  Send, Bot, User, Loader2, Sparkles, Plus, MessageSquare, Menu, X, 
+  Image as ImageIcon, Volume2, Square, Mic, Users, Edit2, Trash2, Check, 
+  MoreVertical, Share2, AlertOctagon, PhoneCall, MapPin, Pill, ShieldCheck 
+} from 'lucide-react'
 import { ProtectedRoute } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
@@ -104,7 +108,7 @@ export default function ChatbotPage() {
     const newSession: ChatSession = {
       id: Date.now().toString(),
       title: 'New Conversation',
-      messages: [{ role: 'bot', content: `Hello ${targetName}! , How can I assist you today?` }],
+      messages: [{ role: 'bot', content: `Hello ${targetName}! How can I assist you today?` }],
       updatedAt: Date.now()
     }
 
@@ -469,9 +473,29 @@ export default function ChatbotPage() {
     }
   }
 
+  // NEW UI UPGRADE: Beautiful renderer for WHO data and markdown
+  const renderMessageContent = (content: string) => {
+    if (content.includes('### 📚 Verified WHO Sources Fetched:')) {
+      const [mainText, sourcesText] = content.split('### 📚 Verified WHO Sources Fetched:');
+      return (
+        <div className="flex flex-col gap-4 w-full">
+          <div className="whitespace-pre-wrap leading-relaxed">{mainText.trim()}</div>
+          <div className="mt-2 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl w-full">
+            <h4 className="flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-400 mb-2 uppercase tracking-wider">
+              <ShieldCheck size={16} /> Verified WHO Sources
+            </h4>
+            <div className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed break-all">
+              {sourcesText.trim()}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <span className="whitespace-pre-wrap leading-relaxed">{content}</span>;
+  };
+
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping, showEmergencyCard])
 
-  // FIXED: Changed min-h-screen to h-[100dvh] and added overflow-hidden to lock the page height
   return (
     <ProtectedRoute>
       <div className="flex flex-col h-[100dvh] overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -606,7 +630,7 @@ export default function ChatbotPage() {
                   <a href="tel:108" className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-colors">
                     <PhoneCall size={18} className="animate-pulse" /> Call 108
                   </a>
-                  <a href={userLocation ? `https://www.google.com/maps/search/hospital+or+clinic/@${userLocation.lat},${userLocation.lng},14z` : `https://www.google.com/maps/search/hospital+or+clinic`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-4 py-2.5 rounded-xl font-medium shadow-sm transition-colors">
+                  <a href={userLocation ? `http://maps.google.com/?q=${userLocation.lat},${userLocation.lng}` : `https://www.google.com/maps/search/nearby+clinics`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-4 py-2.5 rounded-xl font-medium shadow-sm transition-colors">
                     {locationLoading ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
                     {locationLoading ? "Locating..." : "Nearby Clinics"}
                   </a>
@@ -620,13 +644,16 @@ export default function ChatbotPage() {
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar bg-white dark:bg-slate-950">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`flex gap-3 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className={`flex gap-3 w-full sm:max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${m.role === 'user' ? (activePatientId === 'self' ? 'bg-blue-600 text-white border-blue-500' : 'bg-amber-500 text-white border-amber-400') : 'bg-slate-50 border-slate-200'}`}>
                       {m.role === 'user' ? <User size={14}/> : <Bot size={14}/>}
                     </div>
-                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm flex flex-col relative ${m.role === 'user' ? (activePatientId === 'self' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-amber-500 text-white rounded-tr-none') : 'bg-slate-50 border border-slate-100 dark:border-slate-800 rounded-tl-none whitespace-pre-line'}`}>
+                    <div className={`p-4 rounded-2xl text-sm shadow-sm flex flex-col relative w-full ${m.role === 'user' ? (activePatientId === 'self' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-amber-500 text-white rounded-tr-none') : 'bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-tl-none'}`}>
                       {m.imageUrl && <img src={m.imageUrl} alt="Uploaded" className="max-w-full sm:max-w-[250px] rounded-xl mb-3 border border-white/20" />}
-                      <span>{m.content}</span>
+                      
+                      {/* NEW renderer replaces old span to handle WHO formatting */}
+                      {renderMessageContent(m.content)}
+                      
                       {m.role === 'bot' && (
                         <div className="flex items-center gap-3 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
                           <button onClick={() => handleSpeak(m.content)} className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-600 transition">
