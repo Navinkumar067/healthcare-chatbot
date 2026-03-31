@@ -187,7 +187,7 @@ export default function SignupPage() {
                   type="tel"
                   name="phone"
                   required
-                  placeholder="Phone Number (Required for Alerts)"
+                  placeholder="Phone Number"
                   value={formData.phone}
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition-all"

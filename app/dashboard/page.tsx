@@ -28,7 +28,6 @@ export default function DashboardPage() {
   const [recentFiles, setRecentFiles] = useState<any[]>([])
   const [profileScore, setProfileScore] = useState(0)
 
-  // Edit Reminder States
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null)
   const [editTimeValue, setEditTimeValue] = useState('')
 
@@ -45,8 +44,12 @@ export default function DashboardPage() {
   }, [router])
 
   const fetchReminders = async (email: string) => {
-    const { data } = await supabase.from('medicine_reminders').select('*').eq('user_email', email)
-    if (data) setReminders(data)
+    try {
+      const { data } = await supabase.from('medicine_reminders').select('*').eq('user_email', email)
+      if (data) setReminders(data)
+    } catch (e) {
+      console.error("Failed to load reminders", e)
+    }
   }
 
   const deleteReminder = async (id: string) => {
@@ -62,10 +65,7 @@ export default function DashboardPage() {
 
   const saveReminderTime = async (id: string) => {
     if (!editTimeValue.trim()) return setEditingReminderId(null)
-    
-    // Auto-format to ensure AM/PM is capitalized so the background tracker catches it
     const formattedTime = editTimeValue.trim().toUpperCase()
-
     const { error } = await supabase.from('medicine_reminders').update({ reminder_time: formattedTime }).eq('id', id)
     
     if (error) {
@@ -77,8 +77,11 @@ export default function DashboardPage() {
     setEditingReminderId(null)
   }
 
-  const safeParseFile = (fStr: string) => {
-    try { return JSON.parse(fStr); } catch { return { name: 'Attached File', url: fStr }; }
+  // FIXED: Indestructible JSON parser for legacy/corrupted database records
+  const safeParseFile = (fStr: any) => {
+    if (!fStr) return { name: 'Unknown File', url: '#' }
+    if (typeof fStr === 'object') return fStr
+    try { return JSON.parse(fStr); } catch { return { name: 'Attached File', url: String(fStr) }; }
   }
 
   const fetchUserProfile = async (email: string) => {
@@ -96,7 +99,6 @@ export default function DashboardPage() {
           lastCheckup: data.updated_at ? new Date(data.updated_at).toLocaleDateString() : 'New Account'
         })
 
-        // Calculate Profile Completeness Score
         let score = 0;
         if (data.full_name) score += 20;
         if (data.age && data.gender) score += 20;
@@ -105,40 +107,44 @@ export default function DashboardPage() {
         if (data.current_medicines) score += 20;
         setProfileScore(score);
 
-        // Extract Recent Files
         if (data.file_urls && Array.isArray(data.file_urls)) {
             const parsedFiles = data.file_urls.map(safeParseFile).reverse().slice(0, 3);
             setRecentFiles(parsedFiles);
         }
 
-        // Extract Timeline
-        if (data.chat_history && Array.isArray(data.chat_history) && data.chat_history.length > 0) {
-          const sortedHistory = [...data.chat_history].sort((a: any, b: any) => a.updatedAt - b.updatedAt)
-          const timelineEvents = sortedHistory.map((session: any) => {
-            const calculatedSeverity = Math.min(Math.max((session?.messages?.length || 1) - 1, 1), 10)
-            const firstUserMessage = session?.messages?.find((m: any) => m.role === 'user')
+        // FIXED: Bulletproof chat history parser. It will bypass any corrupted messages seamlessly.
+        let timelineEvents = [];
+        if (data.chat_history && Array.isArray(data.chat_history)) {
+          const validSessions = data.chat_history.filter(s => s && typeof s === 'object');
+          const sortedHistory = validSessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+          timelineEvents = sortedHistory.map((session) => {
+            const messagesArray = Array.isArray(session.messages) ? session.messages : [];
+            const calculatedSeverity = Math.min(Math.max((messagesArray.length || 1) - 1, 1), 10);
+            const firstUserMessage = messagesArray.find((m: any) => m && m.role === 'user');
             
             let description = 'General health consultation.';
             if (firstUserMessage && firstUserMessage.content) {
-                if (typeof firstUserMessage.content === 'string') description = firstUserMessage.content;
-                else if (Array.isArray(firstUserMessage.content)) {
-                    const textObj = firstUserMessage.content.find((c: any) => c.type === 'text');
+                if (typeof firstUserMessage.content === 'string') {
+                    description = firstUserMessage.content;
+                } else if (Array.isArray(firstUserMessage.content)) {
+                    const textObj = firstUserMessage.content.find((c: any) => c && c.type === 'text');
                     if (textObj && textObj.text) description = textObj.text;
                 }
             }
-            const safeDescription = description || 'General health consultation.';
+            const safeDescription = String(description || 'General health consultation.');
 
             return {
-              id: session.id,
+              id: session.id || Math.random().toString(),
               date: session.updatedAt ? new Date(session.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Recent',
               event: session.title === 'New Conversation' ? 'Consultation' : (session.title || 'Chat'),
               type: 'symptom',
               severity: calculatedSeverity, 
               desc: safeDescription.length > 60 ? safeDescription.substring(0, 60) + '...' : safeDescription
             }
-          })
-          setHealthTimeline(timelineEvents)
-        } else setHealthTimeline([])
+          });
+        }
+        setHealthTimeline(timelineEvents);
       }
     } catch (err) {
       console.error("Error fetching profile data:", err)
@@ -182,7 +188,6 @@ export default function DashboardPage() {
           <main className="flex-1 px-4 py-8 animate-in fade-in duration-500">
             <div className="max-w-6xl mx-auto space-y-8">
               
-              {/* Header & Action Bar */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
                   <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">Welcome back, {userProfileName.split(' ')[0] || 'User'}</h1>
@@ -204,7 +209,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Top Grid: Profile Info & Score */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 shadow-sm">
                   <div className="flex items-center gap-4">
@@ -242,7 +246,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Quick Health Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-2xl p-4">
                   <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><AlertCircle size={12}/> Allergies</p>
@@ -262,10 +265,8 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Middle Grid: Reminders & Recent Documents */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* Reminders */}
                 <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -279,7 +280,6 @@ export default function DashboardPage() {
                       {reminders.map((reminder) => (
                         <div key={reminder.id} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 rounded-xl p-4 flex items-center justify-between group">
                           
-                          {/* EDIT MODE OR VIEW MODE */}
                           {editingReminderId === reminder.id ? (
                             <div className="flex items-center gap-2 w-full animate-in fade-in zoom-in-95">
                               <input 
@@ -327,7 +327,6 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Recent Documents */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col h-full">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -358,7 +357,6 @@ export default function DashboardPage() {
 
               </div>
 
-              {/* Timeline Section */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-8">
                   <div>
