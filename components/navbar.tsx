@@ -12,9 +12,10 @@ export function Navbar() {
   const [mounted, setMounted] = useState(false)
   const { token, role, logout } = useAuth()
   
-  // Get the current route path
   const pathname = usePathname()
 
+  // This ensures the component waits for the client-side to load
+  // before rendering auth-dependent links, fixing the live link bug.
   useEffect(() => {
     setMounted(true)
     setIsDark(document.documentElement.classList.contains('dark'))
@@ -33,25 +34,17 @@ export function Navbar() {
     setIsDark(!isDark)
   }
 
-  // Helper function to dynamically set desktop link classes
   const getLinkClass = (path: string, extraClasses: string = "") => {
     const isActive = pathname === path;
-    
-    // Updated: Made active state visibly darker and added an even darker hover state
     const activeStyles = 'text-blue-700 bg-blue-200 hover:bg-blue-300 dark:text-blue-300 dark:bg-blue-900/50 dark:hover:bg-blue-900/70';
     const inactiveStyles = 'text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800/50';
-    
     return `px-3 py-2 text-sm font-medium rounded-md transition-colors ${isActive ? activeStyles : inactiveStyles} ${extraClasses}`.trim();
   }
 
-  // Helper function to dynamically set mobile link classes
   const getMobileLinkClass = (path: string) => {
     const isActive = pathname === path;
-    
-    // Updated: Matching mobile active and hover states
     const activeStyles = 'text-blue-700 bg-blue-100 hover:bg-blue-200 dark:text-blue-300 dark:bg-blue-900/50 dark:hover:bg-blue-900/70';
     const inactiveStyles = 'text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-800/50';
-    
     return `block px-3 py-2 text-base font-medium rounded-md transition-colors ${isActive ? activeStyles : inactiveStyles}`.trim();
   }
 
@@ -60,7 +53,6 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           
-          {/* Custom "H" Logo & Title */}
           <Link href="/" className="flex items-center space-x-2 group">
             <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shadow-md shadow-blue-200 dark:shadow-none group-hover:bg-blue-700 transition-all duration-200">
               <span className="text-white font-bold text-lg leading-none">H</span>
@@ -70,62 +62,43 @@ export function Navbar() {
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center space-x-1">
-            <Link href="/" className={getLinkClass('/')}>
-              Home
-            </Link>
+            <Link href="/" className={getLinkClass('/')}>Home</Link>
             
-            {/* Protected Links */}
-            {token ? (
+            {/* The 'mounted' check prevents the wrong navbar from showing on live load */}
+            {mounted && token ? (
               <>
                 {role === 'admin' && (
-                  <Link href="/admin-panel" className={getLinkClass('/admin-panel')}>
-                    Admin Panel
-                  </Link>
+                  <Link href="/admin-panel" className={getLinkClass('/admin-panel')}>Admin Panel</Link>
                 )}
-                <Link href="/dashboard" className={getLinkClass('/dashboard')}>
-                   Dashboard
-                </Link>
-                <Link href="/chatbot" className={getLinkClass('/chatbot')}>
-                  Chatbot
-                </Link>
+                <Link href="/dashboard" className={getLinkClass('/dashboard')}>Dashboard</Link>
+                <Link href="/chatbot" className={getLinkClass('/chatbot')}>Chatbot</Link>
                 <Link href="/profile" className={getLinkClass('/profile', 'flex items-center gap-1.5')}>
                   <UserCircle size={18} /> Profile
                 </Link>
-                <button onClick={logout} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors ml-2">
+                <button onClick={logout} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors ml-2 cursor-pointer">
                   <LogOut size={16} /> Logout
                 </button>
               </>
-            ) : (
-              /* Public Links */
+            ) : mounted && !token ? (
               <>
-                <Link href="/login" className={getLinkClass('/login')}>
-                  Login
-                </Link>
-                {/* REMOVED background color here */}
-                <Link href="/signup" className={getLinkClass('/signup', 'ml-1')}>
-                  Sign Up
-                </Link>
+                <Link href="/chatbot" className={getLinkClass('/chatbot')}>Chatbot</Link>
+                <Link href="/login" className={getLinkClass('/login')}>Login</Link>
+                <Link href="/signup" className={getLinkClass('/signup', 'ml-1')}>Sign Up</Link>
               </>
+            ) : (
+               /* Invisible placeholder to prevent the layout from shifting while loading */
+               <div className="w-64 h-8 opacity-0"></div>
             )}
           </div>
 
           {/* Right Side - Dark Mode & Mobile Menu Toggle */}
           <div className="flex items-center space-x-2">
             {mounted && (
-              <button
-                onClick={toggleDarkMode}
-                className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Toggle dark mode"
-              >
+              <button onClick={toggleDarkMode} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors" aria-label="Toggle dark mode">
                 {isDark ? <Sun size={20} /> : <Moon size={20} />}
               </button>
             )}
-            
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="md:hidden p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
-              aria-label="Toggle menu"
-            >
+            <button onClick={() => setIsOpen(!isOpen)} className="md:hidden p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors" aria-label="Toggle menu">
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
@@ -137,7 +110,7 @@ export function Navbar() {
             <div className="space-y-1">
               <Link href="/" className={getMobileLinkClass('/')} onClick={() => setIsOpen(false)}>Home</Link>
               
-              {token ? (
+              {mounted && token ? (
                 <>
                   {role === 'admin' && (
                     <Link href="/admin-panel" className={getMobileLinkClass('/admin-panel')} onClick={() => setIsOpen(false)}>Admin Panel</Link>
@@ -145,15 +118,17 @@ export function Navbar() {
                   <Link href="/dashboard" className={getMobileLinkClass('/dashboard')} onClick={() => setIsOpen(false)}>Dashboard</Link>
                   <Link href="/chatbot" className={getMobileLinkClass('/chatbot')} onClick={() => setIsOpen(false)}>Chatbot</Link>
                   <Link href="/profile" className={getMobileLinkClass('/profile')} onClick={() => setIsOpen(false)}>Profile</Link>
-                  <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left block px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md mt-2 transition-colors">Logout</button>
+                  <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md mt-2 transition-colors cursor-pointer">
+                     <LogOut size={18} /> Logout
+                  </button>
                 </>
-              ) : (
+              ) : mounted && !token ? (
                 <div className="pt-2 flex flex-col space-y-1">
+                  <Link href="/chatbot" className={getMobileLinkClass('/chatbot')} onClick={() => setIsOpen(false)}>Chatbot</Link>
                   <Link href="/login" className={getMobileLinkClass('/login')} onClick={() => setIsOpen(false)}>Login</Link>
-                  {/* REMOVED background color here */}
                   <Link href="/signup" className={getMobileLinkClass('/signup')} onClick={() => setIsOpen(false)}>Sign Up</Link>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         )}
