@@ -136,20 +136,19 @@ INSTRUCTIONS:
                 { role: "user", content: currentMessageContent }
             ],
             model: "meta-llama/llama-4-scout-17b-16e-instruct",
-            temperature: 0.3, // Lowered temperature slightly to make the AI strictly follow the WHO data
+            temperature: 0.3, 
         });
 
         const text = chatCompletion.choices[0]?.message?.content || "I couldn't generate a response.";
 
-        // NEW: Append the raw WHO data to the bottom of the AI's response so the professor can see it!
+        // --- NEW: Attach the WHO Links to the bottom of the message ---
         let finalResponse = text;
         if (whoLiveDataText && whoLiveDataText.length > 5) {
-            // Clean up the hidden backend tags and make it look nice for the UI
             const formattedSources = whoLiveDataText
                 .replace('*** LIVE WORLD HEALTH ORGANIZATION (WHO) DATA ***', '### 📚 Verified WHO Sources Fetched:')
                 .replace('*********************************************', '');
-
-            finalResponse += `\n\n---\n${formattedSources}`;
+            
+            finalResponse += `\n\n${formattedSources}`;
         }
 
         return NextResponse.json({ text: finalResponse });
