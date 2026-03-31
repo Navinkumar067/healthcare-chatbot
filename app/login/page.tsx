@@ -41,6 +41,7 @@ export default function LoginPage() {
 
     try {
       // 1. Authenticate with Supabase
+      console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -59,7 +60,7 @@ export default function LoginPage() {
         throw profileError
       }
 
-      const userRole = profileData?.role || 'user'
+      const userRole = (profileData as any)?.role || 'user'
 
       // 3. Set the custom sessionStorage (AuthContext will also pick up the Supabase session)
       sessionStorage.setItem('userEmail', formData.email)
