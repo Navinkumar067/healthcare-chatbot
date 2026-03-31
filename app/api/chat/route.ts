@@ -1,7 +1,7 @@
 import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
-// 1. The Image Safety Function (From earlier)
+// The Image Safety Function
 async function getSafeBase64Image(url: string) {
     if (!url) return null;
     if (url.startsWith('data:image')) return url;
@@ -23,13 +23,13 @@ async function getSafeBase64Image(url: string) {
     }
 }
 
-// 2. NEW: The Live WHO Knowledge Retriever (RAG)
+// The Live WHO Knowledge Retriever (RAG)
 async function fetchWHOGuidance(userMessage: string) {
     const serperKey = process.env.SERPER_API_KEY;
     if (!serperKey || typeof userMessage !== 'string' || userMessage.length < 5) return "";
 
     try {
-        // We force Google to ONLY search the official World Health Organization website
+        // force Google to ONLY search the official World Health Organization website
         const searchQuery = `site:who.int symptoms treatment ${userMessage}`;
 
         const response = await fetch('https://google.serper.dev/search', {
@@ -45,7 +45,7 @@ async function fetchWHOGuidance(userMessage: string) {
 
         if (data.organic && data.organic.length > 0) {
             // Extract the text snippets from the WHO search results
-            const snippets = data.organic.map((result: any) => `- ${result.snippet}`).join('\n');
+            const snippets = data.organic.map((result: any) => `- ${result.snippet}\n  Source: ${result.link}`).join('\n\n');
             return `\n*** LIVE WORLD HEALTH ORGANIZATION (WHO) DATA ***\nHere is the latest data pulled directly from the WHO website regarding the user's query:\n${snippets}\n*********************************************\n`;
         }
         return "";
@@ -136,7 +136,7 @@ INSTRUCTIONS:
                 { role: "user", content: currentMessageContent }
             ],
             model: "meta-llama/llama-4-scout-17b-16e-instruct",
-            temperature: 0.3, 
+            temperature: 0.3,
         });
 
         const text = chatCompletion.choices[0]?.message?.content || "I couldn't generate a response.";
@@ -147,7 +147,7 @@ INSTRUCTIONS:
             const formattedSources = whoLiveDataText
                 .replace('*** LIVE WORLD HEALTH ORGANIZATION (WHO) DATA ***', '### 📚 Verified WHO Sources Fetched:')
                 .replace('*********************************************', '');
-            
+
             finalResponse += `\n\n${formattedSources}`;
         }
 
