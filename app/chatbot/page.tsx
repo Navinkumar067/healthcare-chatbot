@@ -550,26 +550,53 @@ export default function ChatbotPage() {
   }
 
   const renderMessageContent = (content: string) => {
+    // Clean up markdown that might mess with the screen reader
     const cleanContent = content.replace(/\*\*/g, '').replace(/#/g, '');
+
+    // Helper function to find URLs and convert them to clickable links
+    const renderTextWithLinks = (text: string) => {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const parts = text.split(urlRegex);
+      
+      return parts.map((part, i) => 
+        part.match(urlRegex) ? (
+          <a 
+            key={i} 
+            href={part} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium underline underline-offset-2 transition-colors"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      );
+    };
 
     if (cleanContent.includes('### 📚 Verified WHO Sources Fetched:')) {
       const [mainText, sourcesText] = cleanContent.split('### 📚 Verified WHO Sources Fetched:');
       return (
         <div className="flex flex-col gap-4 w-full">
-          <div className="whitespace-pre-wrap leading-relaxed">{mainText.trim()}</div>
+          <div className="whitespace-pre-wrap leading-relaxed">
+            {/* Apply link parser to main text too, just in case the AI provides a link */}
+            {renderTextWithLinks(mainText.trim())}
+          </div>
           <div className="mt-2 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl w-full">
             <h4 className="flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-400 mb-2 uppercase tracking-wider">
               <ShieldCheck size={16} /> Verified WHO Sources
             </h4>
             <div className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed break-all">
-              {sourcesText.trim()}
+              {/* Apply link parser to the WHO sources section */}
+              {renderTextWithLinks(sourcesText.trim())}
             </div>
           </div>
         </div>
       );
     }
     
-    return <span className="whitespace-pre-wrap leading-relaxed">{cleanContent}</span>;
+    return <span className="whitespace-pre-wrap leading-relaxed">{renderTextWithLinks(cleanContent)}</span>;
   };
   
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping, showEmergencyCard])
