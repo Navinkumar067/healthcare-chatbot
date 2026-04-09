@@ -51,6 +51,7 @@ export default function ChatbotPage() {
   const [locationLoading, setLocationLoading] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const activeSession = sessions.find(s => s.id === currentSessionId)
   const messages = activeSession ? activeSession.messages : []
@@ -165,7 +166,6 @@ export default function ChatbotPage() {
       if (s.id === sessionId) {
         let newTitle = s.title
         if (firstUserMessageContent && s.messages.length === 1 && s.title === 'New Conversation') {
-          // FIXED: The missing colon is added right here -> : ''
           newTitle = firstUserMessageContent.slice(0, 25) + (firstUserMessageContent.length > 25 ? '...' : '')
         }
         return { ...s, messages: newMessages, title: newTitle, updatedAt: Date.now() }
@@ -276,85 +276,123 @@ export default function ChatbotPage() {
   const toggleListening = async () => { 
     if (isListening) { 
       if (recognitionRef.current) recognitionRef.current.stop(); 
-      setIsListening(false); 
       return; 
     }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return toast.error("Voice typing is not supported in this browser.");
     
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
+      
       const recognition = new SpeechRecognition(); 
       recognition.lang = spokenLang; 
-      recognition.continuous = true; 
+      recognition.continuous = false; 
       recognition.interimResults = true;
-      let finalTranscript = input; 
 
-      recognition.onstart = () => setIsListening(true);
+      recognition.onstart = () => {
+        setIsListening(true);
+        toast.success("Listening...");
+      };
+
       recognition.onresult = (event: any) => { 
-        let interimTranscript = ''; 
+        let currentTranscript = ''; 
         for (let i = event.resultIndex; i < event.results.length; i++) { 
+          const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript + ' ';
-            setInput(finalTranscript);
+            setInput(prev => {
+              const newVal = prev + transcript + ' ';
+              // Auto-resize logic applied here as well
+              if (textareaRef.current) {
+                setTimeout(() => {
+                  if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+                  }
+                }, 10);
+              }
+              return newVal;
+            });
           } else {
-            interimTranscript += event.results[i][0].transcript;
-            setInput(finalTranscript + interimTranscript);
+            currentTranscript += transcript;
           }
-        } 
+        }
       };
+
       recognition.onerror = (event: any) => { 
-        if (event.error === 'not-allowed') toast.error("Microphone access is blocked by your browser.");
-        if (event.error !== 'no-speech') setIsListening(false); 
+        console.error("Speech Recognition Error", event.error);
+        if (event.error === 'not-allowed') toast.error("Microphone access is blocked.");
+        setIsListening(false); 
       };
-      recognition.onend = () => setIsListening(false);
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
       recognition.start(); 
       recognitionRef.current = recognition;
     } catch (error) {
-      toast.error("Microphone access denied. Please allow it to use voice typing.");
+      toast.error("Microphone access denied.");
       setIsListening(false);
     }
   }
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { 
-    const file = e.target.files?.[0]; 
-    if (!file) return;
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1600; 
+          const scaleSize = MAX_WIDTH / img.width;
+          
+          if (scaleSize < 1) {
+            canvas.width = MAX_WIDTH;
+            canvas.height = img.height * scaleSize;
+          } else {
+            canvas.width = img.width;
+            canvas.height = img.height;
+          }
 
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error("Image is too large! Please upload a file smaller than 5MB.");
-      e.target.value = ''; 
-      return;
-    }
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    setIsUploadingImage(true); 
-    const toastId = toast.loading('Attaching image...');
-    
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+            }
+          }, 'image/jpeg', 0.9); 
+        };
+      };
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawFile = e.target.files?.[0];
+    if (!rawFile) return;
+
+    setIsUploadingImage(true);
+    const toastId = toast.loading('Compressing & Attaching...');
+
     try {
-      const fileName = `chat-img-${Date.now()}.${file.name.split('.').pop()}`;
+      const file = await compressImage(rawFile); 
+      const fileName = `chat-img-${Date.now()}.jpg`;
       
-      const { data, error } = await db.storage.from('reports').upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false
-      }); 
-      
-      if (error) {
-        console.error("Supabase Storage Error:", error);
-        throw error;
-      }
-      
-      const { data: { publicUrl } } = db.storage.from('reports').getPublicUrl(fileName); 
-      setSelectedImage(publicUrl); 
-      toast.success('Image attached!', { id: toastId });
+      const { data, error } = await db.storage.from('reports').upload(fileName, file);
+      if (error) throw error;
 
-    } catch (err: any) { 
-      const errorMessage = err.message || "Network error or bucket issue";
-      toast.error(`Upload failed: ${errorMessage}`, { id: toastId, duration: 5000 });
-    } finally { 
+      const { data: { publicUrl } } = db.storage.from('reports').getPublicUrl(fileName);
+      setSelectedImage(publicUrl);
+      toast.success('Image attached!', { id: toastId });
+    } catch (err: any) {
+      toast.error("Upload failed", { id: toastId });
+    } finally {
       setIsUploadingImage(false);
-      e.target.value = ''; 
     }
-  }
+  };
 
   const triggerEmergencyMode = () => {
     setShowEmergencyCard(true)
@@ -413,12 +451,38 @@ export default function ChatbotPage() {
     }
   }
 
+  // Handle typing and auto-resizing the textarea
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'; // Reset height
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`; // Max height 150px
+    }
+  };
+
+  // Handle Enter (Send) vs Shift+Enter (New Line)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || !currentSessionId) return
     const userMsg = { role: 'user', content: input || "Please analyze this image.", imageUrl: selectedImage || undefined }
     const updatedMessages = [...messages, userMsg]
     updateSessionState(currentSessionId, updatedMessages, input)
-    setInput(''); setSelectedImage(null); setIsTyping(true);
+    
+    setInput(''); 
+    setSelectedImage(null); 
+    setIsTyping(true);
+    
+    // Reset textarea height after sending
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
     if (isSpeaking) stopSpeaking()
     if (isListening) toggleListening()
 
@@ -702,20 +766,28 @@ export default function ChatbotPage() {
                   </div>
                 )}
                 
-                <div className="relative flex items-center">
+                {/* UPDATED: Switched from <input> to <textarea> and set the flex wrapper 
+                  to items-end so absolute elements stay at the bottom when text expands. 
+                */}
+                <div className="relative flex items-end">
                   <input type="file" accept="image/*" className="hidden" id="general-image-upload" onChange={handleImageUpload} disabled={isUploadingImage} />
-                  <label htmlFor="general-image-upload" className="absolute left-2 p-2 text-slate-400 hover:text-blue-600 cursor-pointer transition">
+                  <label htmlFor="general-image-upload" className="absolute left-2 bottom-[14px] p-2 text-slate-400 hover:text-blue-600 cursor-pointer transition">
                     <ImageIcon size={22} />
                   </label>
                   
-                  <input 
-                    value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
-                    placeholder={isListening ? "Listening..." : "Ask in any language..."} 
+                  <textarea 
+                    ref={textareaRef}
+                    rows={1}
+                    value={input} 
+                    onChange={handleInputChange} 
+                    onKeyDown={handleKeyDown} 
+                    placeholder={isListening ? "Listening..." : "Ask in any language... (Shift + Enter for new line)"} 
                     disabled={isUploadingImage} 
-                    className={`w-full p-4 pl-12 pr-32 rounded-2xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 ${activePatientId === 'self' ? 'focus:ring-blue-600' : 'focus:ring-amber-500'} outline-none shadow-sm transition ${isListening ? 'border-red-400 ring-2 ring-red-200' : 'border-slate-200'}`} 
+                    className={`w-full py-4 pl-12 pr-[140px] md:pr-[170px] rounded-2xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 ${activePatientId === 'self' ? 'focus:ring-blue-600' : 'focus:ring-amber-500'} outline-none shadow-sm transition resize-none custom-scrollbar ${isListening ? 'border-red-400 ring-2 ring-red-200' : 'border-slate-200'}`} 
+                    style={{ minHeight: '56px', maxHeight: '150px' }}
                   />
                   
-                  <div className="absolute right-14 flex items-center gap-1 sm:gap-2">
+                  <div className="absolute right-14 bottom-[10px] flex items-center gap-1 sm:gap-2">
                     <select value={spokenLang} onChange={(e) => setSpokenLang(e.target.value)} className="bg-transparent text-[10px] sm:text-xs text-slate-500 font-bold uppercase outline-none cursor-pointer hover:text-blue-600 transition max-w-[80px] sm:max-w-[120px] truncate">
                       <option value="en-IN">English</option>
                       <option value="hi-IN">Hindi</option>
@@ -733,10 +805,11 @@ export default function ChatbotPage() {
                     <button type="button" onClick={toggleListening} className={`p-2 rounded-full transition ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-slate-400 hover:text-blue-600'}`}><Mic size={20} /></button>
                   </div>
 
-                  <button onClick={handleSend} disabled={isTyping || isUploadingImage || (!input.trim() && !selectedImage) || !currentSessionId} className={`absolute right-2 p-2 text-white rounded-xl transition disabled:opacity-50 ${activePatientId === 'self' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                  <button onClick={handleSend} disabled={isTyping || isUploadingImage || (!input.trim() && !selectedImage) || !currentSessionId} className={`absolute right-2 bottom-[8px] p-2 text-white rounded-xl transition disabled:opacity-50 ${activePatientId === 'self' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
                     <Send size={20} />
                   </button>
                 </div>
+
               </div>
             </div>
           </main>

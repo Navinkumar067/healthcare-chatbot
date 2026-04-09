@@ -26,6 +26,12 @@ async function getSafeBase64Image(url: string) {
 // The Live WHO Knowledge Retriever (RAG)
 async function fetchWHOGuidance(userMessage: string) {
     const serperKey = process.env.SERPER_API_KEY;
+
+    // Skip the WHO search if the user is just uploading an image without a specific medical question
+    if (userMessage === "Please analyze this image." || userMessage === "Here is an image.") {
+        return "";
+    }
+
     if (!serperKey || typeof userMessage !== 'string' || userMessage.length < 5) return "";
 
     try {
@@ -91,7 +97,8 @@ If the user mentions ANY life-threatening symptoms, YOU MUST PREPEND YOUR RESPON
 **************************
 
 *** REMINDER PROTOCOL ***
-If the user explicitly agrees to a reminder and provides a time, you MUST append this tag at the very end.
+PROACTIVE REMINDER: Whenever you detect a medicine name and a schedule/time in a user's text OR an uploaded prescription image, you MUST explicitly ask the user: "Would you like me to set a reminder for this medicine?"
+If the user explicitly agrees, you MUST append this tag at the very end of your response.
 Format: [SET_REMINDER: Medicine Name (Before/After Food) | Time]
 **************************
           
@@ -106,7 +113,7 @@ ${whoLiveDataText}
 
 INSTRUCTIONS:
 1. REAL-TIME GROUNDING: If the "LIVE WORLD HEALTH ORGANIZATION (WHO) DATA" section above contains information, you MUST base your medical advice heavily on those official WHO snippets. Compare the WHO data against your trained knowledge and explicitly state "According to recent WHO guidelines..." in your response.
-2. PRESCRIPTION OCR: If the user uploads a prescription image, extract the medicine names. Provide a clear list, the exact dosage, and strictly state if it must be taken BEFORE or AFTER food.
+2. PRESCRIPTION OCR: If the user uploads a prescription image, you MUST scan the ENTIRE document line by line from top to bottom. Do NOT stop after finding one medicine. Extract EVERY SINGLE medicine listed. For each one, provide a clear bullet point with the exact dosage, and strictly state if it must be taken BEFORE or AFTER food.
 3. CRITICAL LANGUAGE RULE: You MUST write your ENTIRE response ONLY in the native script of ${targetLanguage}. Do not use Tanglish/Hinglish. Translate all medical terms into easily understandable ${targetLanguage}.
 4. FORMATTING: Do NOT use markdown formatting like asterisks (**) or hashes (#) so the screen reader works perfectly.
 `;
@@ -135,6 +142,7 @@ INSTRUCTIONS:
                 ...formattedHistory,
                 { role: "user", content: currentMessageContent }
             ],
+            // Groq's active Vision model
             model: "meta-llama/llama-4-scout-17b-16e-instruct",
             temperature: 0.3,
         });
