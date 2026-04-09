@@ -781,7 +781,7 @@ export default function ChatbotPage() {
                     value={input} 
                     onChange={handleInputChange} 
                     onKeyDown={handleKeyDown} 
-                    placeholder={isListening ? "Listening..." : "Ask in any language... (Shift + Enter for new line)"} 
+                    placeholder={isListening ? "Listening..." : "Ask in any language..."} 
                     disabled={isUploadingImage} 
                     className={`w-full py-4 pl-12 pr-[140px] md:pr-[170px] rounded-2xl border bg-slate-50 dark:bg-slate-900 focus:ring-2 ${activePatientId === 'self' ? 'focus:ring-blue-600' : 'focus:ring-amber-500'} outline-none shadow-sm transition resize-none custom-scrollbar ${isListening ? 'border-red-400 ring-2 ring-red-200' : 'border-slate-200'}`} 
                     style={{ minHeight: '56px', maxHeight: '150px' }}

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Users, Activity, FileText, Trash2, Ban, CheckCircle, Mail, Image as ImageIcon, X, Send, Eye, ShieldAlert, LogOut, Search, Loader2, AlertTriangle, Shield, HeartPulse } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import { ProtectedRoute } from '@/context/AuthContext'
 
@@ -41,42 +40,74 @@ export default function AdminPanel() {
     verifyAdmin()
   }, [router])
 
+  // --- UPDATED: Securely fetch users via API ---
   async function fetchUsers() {
-    const { data, error } = await supabase.from('profiles').select('*')
-    if (error) {
-      toast.error("Database connection error")
+    try {
+      const res = await fetch('/api/admin/users')
+      const data = await res.json()
+      if (data.users) {
+        setUsers(data.users)
+      } else {
+        toast.error(data.error || "Failed to fetch directory")
+      }
+    } catch (error) {
+      toast.error("API connection error")
+    } finally {
+      setLoading(false)
     }
-    if (data) setUsers(data)
-    setLoading(false)
   }
 
+  // --- UPDATED: Securely update ban status via API ---
   const toggleBan = async (email: string, currentStatus: boolean) => {
     const newStatus = !currentStatus
-    const { error } = await (supabase as any).from('profiles').update({ is_banned: newStatus }).eq('email', email)
-    if (!error) {
+    const toastId = toast.loading('Updating account status...')
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_ban', email, is_banned: newStatus })
+      })
+      if (!res.ok) throw new Error('Update failed')
+      
       setUsers(users.map(u => u.email === email ? { ...u, is_banned: newStatus } : u))
-      toast.success(newStatus ? 'Account suspended successfully' : 'Account access restored')
-    } else {
-      toast.error('Failed to update account status')
+      toast.success(newStatus ? 'Account suspended successfully' : 'Account access restored', { id: toastId })
+    } catch (error) {
+      toast.error('Failed to update account status', { id: toastId })
     }
   }
 
+  // --- UPDATED: Securely delete user via API ---
   const deleteUser = async (email: string) => {
     if (!confirm('CRITICAL ACTION: Are you sure you want to permanently delete this user and all associated family records? This cannot be undone.')) return
-    const { error } = await supabase.from('profiles').delete().eq('email', email)
-    if (!error) {
+    const toastId = toast.loading('Purging account...')
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      if (!res.ok) throw new Error('Deletion failed')
+
       setUsers(users.filter(u => u.email !== email))
-      toast.success('Household records permanently deleted')
+      toast.success('Household records permanently deleted', { id: toastId })
+    } catch (error) {
+      toast.error('Failed to delete user', { id: toastId })
     }
   }
 
+  // --- UPDATED: Securely delete file via API ---
   const deleteFile = async (fileUrl: string, userEmail: string, memberId: string | null) => {
     if (!confirm("Remove this medical document from the server?")) return
     const toastId = toast.loading("Purging document...")
     try {
-      const fileName = fileUrl.split('/').pop()
-      if (fileName) await supabase.storage.from('reports').remove([fileName])
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_file', fileUrl, userEmail, memberId })
+      })
+      if (!res.ok) throw new Error("File deletion failed")
 
+      // Update UI state locally
       const user = users.find(u => u.email === userEmail)
       let updatedUser = { ...user }
 
@@ -84,10 +115,8 @@ export default function AdminPanel() {
         updatedUser.family_members = user.family_members.map((m: any) =>
           m.id === memberId ? { ...m, file_urls: (m.file_urls || []).filter((fStr: string) => !fStr.includes(fileUrl)) } : m
         )
-        await (supabase as any).from('profiles').update({ family_members: updatedUser.family_members }).eq('email', userEmail)
       } else {
         updatedUser.file_urls = user.file_urls.filter((fStr: string) => !fStr.includes(fileUrl))
-        await (supabase as any).from('profiles').update({ file_urls: updatedUser.file_urls }).eq('email', userEmail)
       }
 
       setUsers(users.map(u => u.email === userEmail ? updatedUser : u))

@@ -81,7 +81,7 @@ export function Navbar() {
               </>
             ) : mounted && !token ? (
               <>
-                <Link href="/chatbot" className={getLinkClass('/chatbot')}>Chatbot</Link>
+                {/* REMOVED the Chatbot link from here */}
                 <Link href="/login" className={getLinkClass('/login')}>Login</Link>
                 <Link href="/signup" className={getLinkClass('/signup', 'ml-1')}>Sign Up</Link>
               </>
@@ -124,7 +124,7 @@ export function Navbar() {
                 </>
               ) : mounted && !token ? (
                 <div className="pt-2 flex flex-col space-y-1">
-                  <Link href="/chatbot" className={getMobileLinkClass('/chatbot')} onClick={() => setIsOpen(false)}>Chatbot</Link>
+                  {/* REMOVED the Chatbot link from here */}
                   <Link href="/login" className={getMobileLinkClass('/login')} onClick={() => setIsOpen(false)}>Login</Link>
                   <Link href="/signup" className={getMobileLinkClass('/signup')} onClick={() => setIsOpen(false)}>Sign Up</Link>
                 </div>
